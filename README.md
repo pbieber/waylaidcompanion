@@ -44,6 +44,13 @@ The addon's files are at the root of this repository, so the folder has to be na
 2. Put it in `World of Warcraft/<client>/Interface/AddOns/` as a folder named `PuggerWaylaidCompanion`.
 3. Restart the game or type `/reload`.
 
+## Scripts
+
+Both need Python; the first also needs `lupa` (`pip install lupa`).
+
+- `python scripts/bake_waylaid.py` reads each account's saved `PuggerWaylaidCompanion.lua` (read-only) and writes the turn-ins and Merchant's Favor recorded in game into `Data/Recorded.lua`. `--dry-run` reports without writing; `--wow` sets the game's folder.
+- `python scripts/package.py` builds `dist/PuggerWaylaidCompanion-<version>.zip`, ready to unpack into `Interface/AddOns`.
+
 ## License
 
 MIT. See [LICENSE.txt](LICENSE.txt).

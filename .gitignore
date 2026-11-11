@@ -1,0 +1,8 @@
+# Local runtime and generated packages
+.venv/
+__pycache__/
+*.py[cod]
+dist/
+# Gameplay data must remain local
+SavedVariables/
+*.lua.bak
