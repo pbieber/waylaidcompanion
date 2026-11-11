@@ -14,8 +14,8 @@ local _, ns = ...
 if not CreateFrame then return end
 
 local WIDTH, HEIGHT, MENU = 920, 560, 170
-local ROW, CELLS = 20, 6
-local GREY, GOLD, GREEN = "ff808080", "ffffd100", "ff40d040"
+local ROW, CELLS = 20, 7
+local GREY, GOLD, GREEN, ORANGE = "ff808080", "ffffd100", "ff40d040", "ffff8040"
 
 local window, list, sortBar, note, overview
 local pages = {}
@@ -152,10 +152,28 @@ local STATE_TEXT = {
   open = "",
 }
 
-local function turnInText(writ)
-  local npc = ns.WritNpc(writ)
-  if not npc then return ns.Color(GREY, "Accept the writ to record") end
-  return ("%s, %s"):format(npc.name, npc.zone)
+--- The cost per reputation column: the price, "+ ?" when a part of it has no price and
+--- "*" when a price it is made of is old.
+local function perRepText(cost)
+  if not ns.HasPrices() then return "" end
+  if not cost.perRep then return ns.Color(GREY, "no price") end
+  local text = ns.Money(cost.perRep)
+  if cost.partial then text = text .. ns.Color(ORANGE, " + ?") end
+  if cost.old then text = text .. ns.Color(ORANGE, " *") end
+  return text
+end
+
+--- Tooltip lines for a writ's cost per reputation, and what is wrong with it if anything.
+local function perRepLines(lines, writ, cost, itemName)
+  if not cost.perRep then return end
+  lines[#lines + 1] = { ns.Color(GOLD, "Cost per reputation"),
+    ns.Money(cost.perRep) .. (cost.partial and " + ?" or "") }
+  if cost.partial then
+    lines[#lines + 1] = { ns.Color(ORANGE, ("  Incomplete: no price for %s"):format(cost.writ and itemName or "the writ")) }
+  end
+  if cost.old then
+    lines[#lines + 1] = { ns.Color(ORANGE, ("  Old: a price was last seen %d days ago"):format(cost.age)) }
+  end
 end
 
 --- Tooltip lines for a cost: the total, then its parts ({ label, copper or nil }) when
@@ -220,6 +238,7 @@ local function writEntry(writ, byLevel)
       local lines = { { " " } }
       local cost = ns.WritCost(writ)
       costLines(lines, { { "Writ", cost.writ }, { name, cost.material } })
+      perRepLines(lines, writ, cost, itemName)
       lines[#lines + 1] = { " " }
       holdingLines(lines, "Writs owned", writ.writItem)
       holdingLines(lines, itemName .. " owned", writ.item, writ.count)
@@ -229,15 +248,17 @@ local function writEntry(writ, byLevel)
       ns.Color(ns.WRIT_COLOR[writ.tier], name),
       second,
       "+" .. ns.WRIT_REP[writ.tier],
+      perRepText(ns.WritCost(writ)),
       owned > 0 and ns.Color(GOLD, owned .. " owned") or "",
-      turnInText(writ),
+      npc and npc.zone or ns.Color(GREY, "Not known yet"),
       STATE_TEXT[ns.WritState(writ)],
     },
     click = npc and function() ns.OpenMap(npc.map) end or nil,
   }
 end
 
-local WRIT_COLUMNS = { 0, 220, 345, 390, 455, 625, 710 }
+-- Item, profession or level, reputation, cost per reputation, owned, region, state.
+local WRIT_COLUMNS = { 0, 205, 312, 350, 448, 508, 622, 710 }
 
 pages.writs = {
   title = "Craftsman's Writs",
@@ -273,8 +294,11 @@ pages.writs = {
       entries[#entries + 1] = writEntry(writ, byLevel)
     end
     local known, total = ns.KnownTurnIns()
+    local costNote = ns.HasPrices()
+      and ("Cost per reputation: * a price is %d or more days old, + ? a part has no price."):format(ns.OLD_PRICE_DAYS)
+      or "Cost per reputation needs Auctionator."
     return entries, WRIT_COLUMNS,
-      ("Each writ can be handed in once a day. Turn-in known for %d of %d; the rest are saved when you accept the writ."):format(known, total)
+      ("Each writ can be handed in once a day. %s Turn-in known for %d of %d."):format(costNote, known, total)
   end,
 }
 

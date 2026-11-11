@@ -109,6 +109,19 @@ function ns.Price(id)
   return nil
 end
 
+-- A price Auctionator last saw this many days ago, or longer, counts as old.
+ns.OLD_PRICE_DAYS = 3
+
+--- How many days ago Auctionator last saw an item on the auction house (0 for today);
+--- nil when it can't say.
+function ns.PriceAge(id)
+  local api = auctionator()
+  if not api or not api.GetAuctionAgeByItemID then return nil end
+  local ok, days = pcall(api.GetAuctionAgeByItemID, ADDON, id)
+  if ok and type(days) == "number" and days >= 0 then return days end
+  return nil
+end
+
 --- Copper as coloured "12g 34s 56c", leaving out the parts that are zero.
 function ns.Money(copper)
   copper = math.floor(copper + 0.5)
@@ -121,13 +134,23 @@ function ns.Money(copper)
 end
 
 --- What a writ costs to do from nothing: { writ, each, material (each x count), total
---- (of the parts with a price), partial (a part has none) }.
+--- (of the parts with a price), partial (a part has none), age (days since the oldest
+--- of its prices was seen, nil when unknown), old (that is OLD_PRICE_DAYS or more),
+--- perRep (total for each point of reputation; nil when no part has a price) }.
 function ns.WritCost(writ)
   local paper, each = ns.Price(writ.writItem), ns.Price(writ.item)
   local material = each and each * writ.count
+  local age
+  for _, id in ipairs({ paper and writ.writItem or false, each and writ.item or false }) do
+    local days = id and ns.PriceAge(id)
+    if days and (not age or days > age) then age = days end
+  end
+  local total = (paper or 0) + (material or 0)
   return {
     writ = paper, each = each, material = material,
-    total = (paper or 0) + (material or 0), partial = not (paper and material),
+    total = total, partial = not (paper and material),
+    age = age, old = age ~= nil and age >= ns.OLD_PRICE_DAYS,
+    perRep = (paper or material) and total / ns.WRIT_REP[writ.tier] or nil,
   }
 end
 
