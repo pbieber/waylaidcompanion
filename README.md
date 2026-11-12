@@ -49,7 +49,7 @@ The addon's files are at the root of this repository, so the folder has to be na
 Both need Python; the first also needs `lupa` (`pip install lupa`).
 
 - `python scripts/bake_waylaid.py` reads each account's saved `PuggerWaylaidCompanion.lua` (read-only) and writes the turn-ins and Merchant's Favor recorded in game into `Data/Recorded.lua`. `--dry-run` reports without writing; `--wow` sets the game's folder.
-- `python scripts/package.py` builds `dist/PuggerWaylaidCompanion-<version>.zip`, ready to unpack into `Interface/AddOns`.
+- `python scripts/release.py` builds `dist/PuggerWaylaidCompanion-<version>.zip`, the file to upload to CurseForge. Give it a version, as in `python scripts/release.py 0.4.0`, to write that into the toc first.
 
 ## License
 
