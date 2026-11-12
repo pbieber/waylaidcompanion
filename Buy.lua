@@ -191,7 +191,7 @@ local function nextStep(fromClick)
   release()
   buy.index = buy.index + 1
   if buy.index > #buy.steps then
-    return finish(buy.bought > 0 and ("done buying for %s."):format(buy.title) or nil)
+    return finish(buy.bought > 0 and ("done: %s."):format(buy.title) or nil)
   end
   search(fromClick)
 end
@@ -201,7 +201,7 @@ local function sendSearch()
   local s = step()
   buy.state, buy.waited, buy.seen, buy.clickSent = "wait", 0, {}, true
   AH.SendSearchQuery(s.key or AH.MakeItemKey(s.id), sorts(), true)
-  if buy and buy.state == "wait" then show({ status = "Looking it up...", qty = s.need }) end
+  if buy and buy.state == "wait" then show({ status = "Searching...", qty = s.need }) end
 end
 
 --- Look the current item up. Inside a click the search goes out at once; otherwise on
@@ -211,24 +211,22 @@ function search(fromClick)
   s.kind, s.auction, s.qty, s.queue, s.list = nil, nil, nil, nil, nil
   s.key = ns.ItemKey and ns.ItemKey(s.id)  -- the auction house's own key, from a scan
   buy.waited, buy.seen, buy.late = 0, {}, false
-  if s.material then
+  if s.material and buy.writStep then
     s.need = materialNeed()
     if s.need == 0 then
       buy.state = "enough"
       return show({ status = "Nothing to buy.", qty = 0, action = "Done",
-        notes = { ("Your bags hold %d, enough for %d writ%s."):format(buy.materialHeld,
-          buy.writsHeld + (buy.writStep and buy.writStep.planned or 0),
-          (buy.writsHeld + (buy.writStep and buy.writStep.planned or 0)) == 1 and "" or "s") } })
+        notes = { ("In bags: %d. Enough."):format(buy.materialHeld) } })
     end
   end
   if s.target then s.need = s.target - s.got end  -- partway through: what is left
   if fromClick then return sendSearch() end
   if searchNeedsClick then
     buy.state = "ask"
-    return show({ status = "Ready to look it up.", qty = s.need, action = "Look up" })
+    return show({ status = "Click Look up.", qty = s.need, action = "Look up" })
   end
   buy.state = s.key and "send" or "browse0"
-  show({ status = "Looking it up...", qty = s.need })
+  show({ status = "Searching...", qty = s.need })
 end
 
 -- ---------------------------------------------------------------------------
@@ -266,19 +264,19 @@ function offer()
   s.plan = p
   local notes = {}
   if s.writ then
-    notes[#notes + 1] = ns.Color(GREY, ("%d listed. In your bags: %d."):format(s.listed, buy.writsHeld))
+    notes[#notes + 1] = ns.Color(GREY, ("Listed: %d. In bags: %d."):format(s.listed, buy.writsHeld))
   elseif p.quantity < want then
-    notes[#notes + 1] = ns.Color(RED, ("Only %d listed; this buys them all."):format(p.quantity))
+    notes[#notes + 1] = ns.Color(RED, ("Only %d listed."):format(p.quantity))
   end
   if s.kind == "item" and p.quantity > 1 then
-    notes[#notes + 1] = ns.Color(GREY, "One click for each: the auction house sells these one at a time.")
+    notes[#notes + 1] = ns.Color(GREY, "One click each.")
   end
   local each = p.quantity > 0 and eachRange(p.low, p.high)
   if each then notes[#notes + 1] = ns.Color(GREY, each) end
   notes[#notes + 1] = purse(p.price)
   if not s.writ and buy.writStep then
     local writs = buy.writsHeld + (buy.writStep.planned or 0)
-    notes[#notes + 1] = ns.Color(GREY, ("For %d writ%s x %d, less %d in your bags."):format(
+    notes[#notes + 1] = ns.Color(GREY, ("%d writ%s x %d, minus %d in bags."):format(
       writs, writs == 1 and "" or "s", buy.count, buy.materialHeld))
   end
   local action
@@ -286,7 +284,7 @@ function offer()
     action = (s.kind == "item" and p.quantity > 1) and ("Buy (1 of %d)"):format(p.quantity) or "Buy"
   end
   show({ pay = p.quantity > 0 and p.price or nil, about = s.kind == "commodity",
-    status = "How many to buy? Or Skip.", qty = s.writ and want or p.quantity,
+    status = "Set an amount.", qty = s.writ and want or p.quantity,
     edit = s.writ, notes = notes, action = action })
 end
 
@@ -336,7 +334,7 @@ local function itemResults(itemKey)
     local a = s.list[1]
     s.nextAuction, buy.state = a, "next"
     return show({ pay = a.each, qty = 1, action = ("Buy (%d of %d)"):format(s.got + 1, s.target),
-      notes = { s.note, ns.Color(GREY, ("Bought %d of %d. One click for each."):format(s.got, s.target)),
+      notes = { s.note, ns.Color(GREY, ("Bought %d of %d."):format(s.got, s.target)),
         purse(a.each) } })
   end
   if s.writ then s.want = math.min(s.want, s.listed) end
@@ -352,9 +350,9 @@ function handOff(s)
   local want = s.writ and s.want or s.need
   local p = plan(s, want)
   show({ pay = p.price, qty = p.quantity, action = "Next", notes = {
-    ns.Color(RED, "The game blocked this addon's purchase."),
-    fillSearchBox(s.name) and "Buy it in the auction house window: its name is in the search box. Then click Next."
-      or "Buy it in the auction house window, then click Next.",
+    ns.Color(RED, "Blocked by the game."),
+    fillSearchBox(s.name) and "Buy it in the AH window (name in search box), then Next."
+      or "Buy it in the AH window, then Next.",
   } })
 end
 
@@ -388,7 +386,7 @@ local function onBuy()
     buy.state, buy.waited, buy.holding, buy.seen = "quote", 0, true, {}
     C_AuctionHouse.StartCommoditiesPurchase(s.id, s.qty)
     if buy and buy.state == "quote" then
-      show({ status = "Asking the auction house for the exact price...", qty = s.qty })
+      show({ status = "Getting the price...", qty = s.qty })
     end
   elseif state == "confirm" then
     buy.state, buy.waited, buy.holding, buy.seen = "paying", 0, false, {}
@@ -483,7 +481,7 @@ events:SetScript("OnEvent", function(_, event, ...)
     buy.seen[#buy.seen + 1] = event
   end
   if event == "AUCTION_HOUSE_CLOSED" then
-    return finish(buy.bought > 0 and "auction house closed; the rest was not bought." or nil)
+    return finish(buy.bought > 0 and "AH closed. Rest not bought." or nil)
   elseif BLOCKED[event] then
     local addon, fn = ...
     if addon ~= ADDON then return end
@@ -492,13 +490,13 @@ events:SetScript("OnEvent", function(_, event, ...)
       -- A search sent outside a click: from now on, ask for one.
       searchNeedsClick = true
       buy.state = "ask"
-      return show({ status = "The game wants a click to search.", qty = s.need, action = "Look up" })
+      return show({ status = "Click to search.", qty = s.need, action = "Look up" })
     end
     if where == "paying" and s.kind == "item" then
       bidBlocked = true
       return handOff(s)
     end
-    failed(("The game blocked the addon from calling %s while %s."):format(
+    failed(("Blocked: %s while %s."):format(
       tostring(fn or "?"), STAGES[where] or tostring(where)))
   elseif event == "AUCTION_HOUSE_BROWSE_RESULTS_UPDATED" then
     if buy.state == "browse" then browseResults(AH.GetBrowseResults()) end
@@ -515,24 +513,24 @@ events:SetScript("OnEvent", function(_, event, ...)
     local notFound = (errors and errors.ItemNotFound) or 4
     if code == notFound and buy.state == "paying" and s.kind == "item" and s.target then
       -- Sold to someone else, or no longer in this client's results: look again.
-      s.note = ns.Color(RED, "That auction was gone; this is the next cheapest.")
+      s.note = ns.Color(RED, "Sold. Next cheapest:")
       return search()
     end
-    failed(("The auction house refused (error %s)."):format(tostring(code)))
+    failed(("AH error %s."):format(tostring(code)))
   elseif event == "COMMODITY_PRICE_UPDATED" and buy.state == "quote" then
     local unit, total = ...
     s.total, buy.state = total, "confirm"
     show({ pay = total, qty = s.qty, action = "Confirm", notes = {
       ns.Color(GREY, coins(unit) .. " each"),
-      s.estimate and total > s.estimate * 1.1 and ns.Color(RED, "Dearer than listed a moment ago.") or nil,
+      s.estimate and total > s.estimate * 1.1 and ns.Color(RED, "Price went up.") or nil,
       purse(total),
     } })
   elseif event == "COMMODITY_PRICE_UNAVAILABLE" and buy.state == "quote" then
-    failed("The auction house has no price for that quantity any more.")
+    failed("No price for that amount now.")
   elseif event == "COMMODITY_PURCHASE_SUCCEEDED" and buy.state == "paying" then
     bought(s.qty)
   elseif event == "COMMODITY_PURCHASE_FAILED" and buy.state == "paying" then
-    failed("The purchase failed.")
+    failed("Purchase failed.")
   elseif event == "AUCTION_HOUSE_PURCHASE_COMPLETED" and s.kind == "item" and s.auction
     and (buy.state == "paying" or (buy.state == "failed" and buy.late)) then
     -- A late answer still counts: the purchase went through.
@@ -545,7 +543,7 @@ events:SetScript("OnEvent", function(_, event, ...)
     bought(s.qty)
   elseif event == "UI_ERROR_MESSAGE" and buy.state == "paying" then
     local _, message = ...
-    failed(type(message) == "string" and message or "The purchase failed.")
+    failed(type(message) == "string" and message or "Purchase failed.")
   end
 end)
 
@@ -558,7 +556,7 @@ driver:SetScript("OnUpdate", function(_, elapsed)
   local s = step()
   if buy.state == "browse0" then
     if not ready then
-      if buy.waited > TIMEOUT then failed("The auction house is busy; try again in a moment.") end
+      if buy.waited > TIMEOUT then failed("AH busy. Try again.") end
       return
     end
     buy.state, buy.waited, buy.clickSent = "browse", 0, false
@@ -573,7 +571,7 @@ driver:SetScript("OnUpdate", function(_, elapsed)
     buy.state, buy.waited = "send", 0  -- no browse answer: search with a made key
   elseif buy.state == "send" then
     if not ready then
-      if buy.waited > TIMEOUT then failed("The auction house is busy; try again in a moment.") end
+      if buy.waited > TIMEOUT then failed("AH busy. Try again.") end
       return
     end
     buy.state, buy.waited, buy.clickSent = "wait", 0, false
@@ -581,14 +579,14 @@ driver:SetScript("OnUpdate", function(_, elapsed)
   elseif buy.state == "wait" then
     if buy.waited > 1.5 then pollResults() end
     if buy.state == "wait" and buy.waited > TIMEOUT then
-      failed("The auction house didn't answer the search.")
+      failed("No search answer.")
     end
   elseif buy.state == "quote" and buy.waited > TIMEOUT then
-    failed("The auction house didn't send a price.")
+    failed("No price answer.")
   elseif buy.state == "paying" and buy.waited > PAY_TIMEOUT then
     -- It may or may not have gone through: say so rather than buy twice. A late
     -- confirmation still counts.
-    failed("No confirmation of the purchase. Check your mailbox before buying again.")
+    failed("No confirmation. Check mail before retrying.")
     buy.late = true
   end
 end)
@@ -620,7 +618,7 @@ local function makeDialog()
 
   local title = dialog:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
   title:SetPoint("TOP", 0, -5)
-  title:SetText("Buy at the auction house")
+  title:SetText("Buy")
 
   dialog.heading = dialog:CreateFontString(nil, "OVERLAY", "GameFontNormal")
   dialog.heading:SetPoint("TOPLEFT", 16, -34)
@@ -712,15 +710,42 @@ local function makeDialog()
   dialog:SetScript("OnHide", function() if buy then finish(nil) end end)
 end
 
+--- Whether buying can start now; says why not.
+local function canStart()
+  if not CAN then
+    print(ns.TITLE .. ": no AH buying on this client.")
+    return false
+  end
+  if not ns.AuctionHouseOpen() then
+    print(ns.TITLE .. ": open the AH.")
+    return false
+  end
+  if ns.ScanProgress().running then
+    print(ns.TITLE .. ": stop the scan.")
+    return false
+  end
+  if buy then finish(nil) end
+  return true
+end
+
+--- Buy a list of materials, one step each: { { id, need, name }, ... }.
+function ns.BuyMaterials(list)
+  if not canStart() then return end
+  local steps = {}
+  for _, m in ipairs(list) do
+    local name, icon = ns.Item(m.id, m.name)
+    steps[#steps + 1] = { id = m.id, material = true, name = name, icon = icon, need = m.need }
+  end
+  if #steps == 0 then return end
+  if not dialog then makeDialog() end
+  buy = { title = "Missing material", steps = steps, index = 1, bought = 0, waited = 0 }
+  search(true)  -- the click in the Transfer menu
+end
+
 --- Buy writs and their material: the writ count is set in the window (one to start with
 --- when the bags hold none), the material follows it.
 function ns.BuyForWrit(writ)
-  if not CAN then
-    return print(ns.TITLE .. ": this client's auction house can't be bought from by an addon.")
-  end
-  if not ns.AuctionHouseOpen() then return print(ns.TITLE .. ": open the auction house first.") end
-  if ns.ScanProgress().running then return print(ns.TITLE .. ": stop the price scan first.") end
-  if buy then finish(nil) end
+  if not canStart() then return end
 
   local writsHeld = ns.Count(writ.writItem)
   local writName, writIcon = ns.Item(writ.writItem, "Writ: " .. writ.name)

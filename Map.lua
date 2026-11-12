@@ -46,7 +46,7 @@ local function showTooltip(pin)
 
   if stop.camp then
     GameTooltip:AddLine(stop.npc.faction, 1, 1, 1)
-    GameTooltip:AddLine("Hand in filled Waylaid Crates here.", 0.8, 0.8, 0.8)
+    GameTooltip:AddLine("Turn in filled crates here.", 0.8, 0.8, 0.8)
     local held = 0
     for _, crate in ipairs(ns.crates) do held = held + ns.Count(crate.item) end
     if held > 0 then
@@ -61,13 +61,13 @@ local function showTooltip(pin)
     GameTooltip:AddLine(" ")
     for _, writ in ipairs(stop.writs) do
       local state = ns.WritState(writ)
-      local right, r, g, b = "Available", 0.25, 0.82, 0.25
+      local right, r, g, b = "Open", 0.25, 0.82, 0.25
       if state == "done" then
-        right, r, g, b = "Done today", 0.5, 0.5, 0.5
+        right, r, g, b = "Done", 0.5, 0.5, 0.5
       elseif state == "ready" then
-        right, r, g, b = "Ready to hand in", 0.25, 1, 0.25
+        right, r, g, b = "Ready", 0.25, 1, 0.25
       elseif state == "holding" then
-        right, r, g, b = "Writ in bags", 1, 0.82, 0
+        right, r, g, b = "In bags", 1, 0.82, 0
       end
       local name = ns.Item(writ.item, writ.name)
       if writ.count > 1 then name = writ.count .. " x " .. name end

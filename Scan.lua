@@ -97,7 +97,7 @@ end
 local function finish(stopped)
   if not scan then return end
   last = { found = scan.found, total = #scan.items, done = scan.index - 1, stopped = stopped }
-  print(("%s: auction house scan %s, %d of %d items listed."):format(ns.TITLE,
+  print(("%s: scan %s. %d of %d listed."):format(ns.TITLE,
     stopped and "stopped" or "done", scan.found, scan.index - 1))
   scan = nil
   notify()
@@ -236,10 +236,10 @@ end
 
 --- Start a scan; false and a reason when it can't.
 function ns.StartScan()
-  if scan then return false, "A scan is already running." end
-  if not ns.CanScan() then return false, "This client has no auction house search." end
-  if not ahOpen then return false, "Open the auction house first." end
-  if ns.Buying and ns.Buying() then return false, "Finish buying first." end
+  if scan then return false, "Scan running." end
+  if not ns.CanScan() then return false, "No AH search on this client." end
+  if not ahOpen then return false, "Open the AH." end
+  if ns.Buying and ns.Buying() then return false, "Finish buying." end
   scan = { items = itemsToScan(), index = 1, page = 0, found = 0, state = "send", waited = 0 }
   driver:Show()
   notify()

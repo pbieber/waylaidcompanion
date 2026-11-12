@@ -214,7 +214,7 @@ function ns.Resettle()
     end
   end
   if moved > 0 then
-    print(("%s: corrected the zone of %d recorded writ turn-in%s."):format(ns.TITLE, moved, moved == 1 and "" or "s"))
+    print(("%s: zone fixed for %d turn-in%s."):format(ns.TITLE, moved, moved == 1 and "" or "s"))
     ns.Changed()
   end
   return moved
@@ -226,7 +226,7 @@ local function noteSide(writ)
   local side = ns.Side()
   if not writ.side or not side or writ.side == side or ns.db.anySide[writ.quest] then return end
   ns.db.anySide[writ.quest] = true
-  print(("%s: Craftsman's Writ: %s is not limited to the %s after all, now listed."):format(
+  print(("%s: %s is not %s only. Listed."):format(
     ns.TITLE, writ.name, writ.side == "A" and "Alliance" or "Horde"))
   ns.Changed()
 end
@@ -266,7 +266,7 @@ function ns.Locate()
       db.writNpc[writ.quest] = id
       noted = noted + 1
       local n = ns.WRIT_NPCS[id] or db.npcs[id]
-      print(("%s: noted where Craftsman's Writ: %s is handed in (%s %.1f, %.1f)."):format(
+      print(("%s: turn-in saved: %s, %s (%.1f, %.1f)."):format(
         ns.TITLE, writ.name, n[5], n[3], n[4]))
     end
   end
@@ -309,7 +309,7 @@ function ns.Where()
         npc and ("%s, %s %.1f, %.1f"):format(npc.name, npc.zone, npc.x, npc.y) or "nothing"))
     end
   end
-  if not any then print(ns.TITLE .. ": no Craftsman's Writ quest is in your quest log.") end
+  if not any then print(ns.TITLE .. ": no writ quest in your log.") end
   ns.Locate()
 end
 
@@ -357,7 +357,7 @@ function ns.Learn(quest)
     end
     db.writNpc[quest] = id
   end
-  print(("%s: noted %s as the turn-in for Craftsman's Writ: %s."):format(ns.TITLE, name, writ.name))
+  print(("%s: turn-in saved: %s for %s."):format(ns.TITLE, name, writ.name))
 end
 
 -- ---------------------------------------------------------------------------
@@ -422,7 +422,7 @@ function ns.CrateHandedIn(quest)
     ns.db.favor[key] = seen
     seen[amount] = (seen[amount] or 0) + 1
     local tier = ns.SealedTier(key)
-    print(("%s: noted %d Merchant's Favor for %s."):format(ns.TITLE, amount,
+    print(("%s: Merchant's Favor saved: %d for %s."):format(ns.TITLE, amount,
       tier and ("a Sealed " .. (ns.CRATE_TIERS[tier] or "Elite") .. " Crate") or ("quest " .. quest)))
     ns.Changed()
   end)

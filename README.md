@@ -1,25 +1,25 @@
 # Pugger Waylaid Companion
 
-A World of Warcraft Classic addon for the two trade factions, Durotar Supply and Logistics and the Azeroth Commerce Authority. It lists every Craftsman's Writ and Waylaid Crate, shows where each one is handed in, and tracks what is left to do today.
+A World of Warcraft Classic addon for the two trade factions, Durotar Supply and Logistics and the Azeroth Commerce Authority. It lists every Craftsman's Writ and Waylaid Crate, where each is turned in, and what is left today.
 
-## What it shows
+## Pages
 
-Open the window with `/pwc`, the minimap button or the addon compartment. It has four pages:
+Open the window with `/pwc`, the minimap button or the addon compartment.
 
-- **Overview**: your standing with your trade faction, how many writs of each tier the next standing and Exalted take, and how many daily turn-ins are left today.
-- **Craftsman's Writs**: every writ for your side, by level, by profession or by cost, with the item it asks for, its reputation, what 100 reputation costs through it, how many your account owns, the region of its turn-in and whether it is done today. The tooltip names the NPC and gives the cost breakdown and who holds what; clicking a row opens the map on the turn-in.
-- **Waylaid Crates**: every crate and the items that fill it, how many crates your account owns, how many of each item you carry, and the Merchant's Favor it pays.
-- **Turn-ins**: every place writs and crates go, a continent at a time.
+- **Overview**: your standing, the turn-ins to the next standing and to Exalted, and what is open today.
+- **Craftsman's Writs**: every writ for your side, by tier, profession or cost: material, rep, cost per 100 rep, owned, zone of the turn-in, today. Click a row: map (or, at the auction house, buy).
+- **Waylaid Crates**: every crate and its material, owned, and the Merchant's Favor it pays.
+- **Turn-ins**: every turn-in, by continent. Also marked on the world map.
+- **Rewards**: what your faction's quartermaster sells, by standing, with its cost and whether you can buy it. Learned the first time you open the quartermaster's shop.
+- **Transfer**: mail, bank and buying for writs (below).
 
-On the writs and crates pages, click a level or profession header to fold that group away; click it again to open it. Folded groups stay folded until you open them.
-
-The same places are marked on the world map. Hovering a marker lists the writs handed in there.
+Click a group header to fold it.
 
 ## Prices
 
 Prices come from the addon's own auction house scan and from [Auctionator](https://www.curseforge.com/wow/addons/auctionator), whichever saw the item more recently. Auctionator is optional: without it, the scan alone fills in every price.
 
-To scan, open the auction house, then press **Scan auction house** under the writs list (or type `/pwc scan`). It searches every writ, every material a writ asks for, and every crate and what fills it, one item at a time, with a progress bar beside the button. Several hundred items take a few minutes. Closing the auction house stops the scan and keeps what it found. Prices are kept per realm and side.
+To scan, open the auction house, then press **Scan AH** under the writs list (or type `/pwc scan`). It searches every writ, every material a writ asks for, and every crate and what fills it, one item at a time, with a progress bar beside the button. Several hundred items take a few minutes. Closing the auction house stops the scan and keeps what it found. Prices are kept per realm and side.
 
 In the Cost / 100 rep column:
 
@@ -32,31 +32,38 @@ The shipped data does not have a turn-in for every writ. The addon learns the re
 
 ## Buying at the auction house
 
-With the auction house open, click a writ's row to buy writs and their material. A small window over the auction house takes you through two steps, showing each item with **Paying** *price* **for:** above it, and nothing is bought without a click there:
+With the auction house open, click a writ's row. The buy window shows each item under **Paying** *price* **for:**. Nothing is bought without a click.
 
-1. **The writ.** Type how many to buy, or click **Max** for every one listed; the price follows the count, cheapest first. It starts at one when your bags hold no writ, at none when they do.
-2. **The material.** As many as your writs ask for (the ones in your bags plus those just bought) less what your bags already hold. If that's nothing, the window says so.
+1. **Writ.** Type an amount, or **Max** for all listed. Cheapest first; one click per writ.
+2. **Material.** Your writs (in bags plus bought) times what each asks for, minus what your bags hold.
 
-An item sold in bulk shows its price from the listings; **Buy** asks the auction house for the exact price, **Confirm** pays it. An item sold one auction at a time (writs, on WoW Forever) is paid one auction per click.
+Material sold in bulk: **Buy** gets the exact price, **Confirm** pays. **Skip** moves on, **Cancel** stops.
 
-If the game blocks the addon's purchase of a writ, the window puts the writ's name in the auction house's own search box and shows the cheapest price; buy it there with the game's Buyout button, then click **Next** for the material. Materials sold in bulk are bought from the window as above.
+## Transfer
 
-**Skip** moves on to the next item, **Cancel** stops. With the auction house closed, a click opens the map instead.
+A *set* is one writ and its material.
+
+- **Mail**: one set of each writ in your bags to a character, up to 12 attachments a mail; click **Send** for each. Needs a mailbox on the Send Mail tab. Your alts are listed once you have logged in on them (mail goes to first name and surname). Type any other name to send to it, or **Save** it as a button.
+- **Bank**: needs the bank open. **Bank to bags** and **Bags to bank**, each with:
+  - **1 of each**: a writ of each kind and its material (into the bags: only kinds the bags lack).
+  - **Extra**: every writ but one of each kind.
+  - **All writs**: every writ.
+- **Buying**: needs the auction house open. **Buy missing material** buys what the writs in your bags still need.
 
 ## Writs on other characters
 
-The Owned column counts the writs on every character of the account: bags, bank and mailbox. Another character counts as it was when you last played it, the bank as it was when last open there. A number on its own is on the character you are playing; a writ on another character shows that character's name. Tick **Show both names** under the writs list, or type `/pwc names`, to name two other characters instead of one. The crates page counts crates the same way. The tooltip lists every character and where they keep them, for the writ and for its material.
+The Owned column counts the writs on every character of the account: bags, bank and mailbox. Another character counts as it was when you last played it, the bank as it was when last open there. A number on its own is on the character you are playing; a writ on another character shows that character's name. Tick **Show both names** under the writs list, or type `/pwc names`, to show first name and surname. The crates page counts crates the same way. The tooltip lists every character and where they keep them, for the writ and for its material.
 
 ## Commands
 
 | Command | What it does |
 | --- | --- |
 | `/pwc` or `/waylaid` | Show or hide the window |
-| `/pwc writs`, `/pwc crates`, `/pwc turnins` | Open the window on that page |
+| `/pwc writs`, `/pwc crates`, `/pwc turnins`, `/pwc rewards`, `/pwc transfer` | Open the window on that page |
 | `/pwc map` | Show or hide the world map markers |
 | `/pwc minimap` | Show or hide the minimap button |
 | `/pwc scan` | Start or stop the auction house scan |
-| `/pwc names` | Show one or both names of other characters in the Owned column |
+| `/pwc names` | Show first name only, or first name and surname |
 | `/pwc where` | Print what the game reports for each writ in the quest log |
 
 ## Install

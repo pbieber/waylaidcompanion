@@ -1,10 +1,12 @@
 --[[
 The window: a menu down the left, a page on the right.
 
-  Overview           - reputation and what is left today (Overview.lua)
-  Craftsman's Writs  - every writ, by level or by profession
-  Waylaid Crates     - every crate and what fills it, by level or by profession
+  Overview           - rep and what is left today (Overview.lua)
+  Craftsman's Writs  - every writ, by tier, profession or cost
+  Waylaid Crates     - every crate and its material, by tier or profession
   Turn-ins           - where writs and crates go; the same places Map.lua marks
+  Rewards            - the quartermaster's items (Rewards.lua)
+  Transfer           - mail, bank and buying (Transfer.lua)
 
 Each list page builds plain entries ({ header = ... } or { cells = {...} }) and hands them
 to one shared list, which draws them with pooled rows.
@@ -17,7 +19,8 @@ local WIDTH, HEIGHT, MENU = 920, 560, 170
 local ROW, CELLS, HEAD = 20, 7, 18
 local GREY, GOLD, GREEN, ORANGE = "ff808080", "ffffd100", "ff40d040", "ffff8040"
 
-local window, list, sortBar, note, scanBar, overview
+local window, list, sortBar, note, scanBar
+local panels = {}  -- the pages that aren't lists: overview, transfer
 local refresh
 local pages = {}
 
@@ -204,7 +207,7 @@ local STATE_TEXT = {
 local function costText(cost)
   if not ns.HasPrices() then return "" end
   if not cost.per100 then return ns.Color(GREY, "no price") end
-  local text = ns.Money(cost.per100)
+  local text = ns.Coins(cost.per100)
   if cost.partial then text = text .. ns.Color(ORANGE, " + ?") end
   if cost.old then text = text .. ns.Color(ORANGE, " *") end
   return text
@@ -213,13 +216,13 @@ end
 --- Tooltip lines for a writ's cost per 100 reputation, and what is wrong with it if anything.
 local function per100Lines(lines, cost, itemName)
   if not cost.per100 then return end
-  lines[#lines + 1] = { ns.Color(GOLD, "Cost per 100 reputation"),
-    ns.Money(cost.per100) .. (cost.partial and " + ?" or "") }
+  lines[#lines + 1] = { ns.Color(GOLD, "Cost / 100 rep"),
+    ns.Coins(cost.per100) .. (cost.partial and " + ?" or "") }
   if cost.partial then
-    lines[#lines + 1] = { ns.Color(ORANGE, ("  Incomplete: no price for %s"):format(cost.writ and itemName or "the writ")) }
+    lines[#lines + 1] = { ns.Color(ORANGE, ("  No price: %s"):format(cost.writ and itemName or "writ")) }
   end
   if cost.old then
-    lines[#lines + 1] = { ns.Color(ORANGE, ("  Old: a price was last seen %d days ago"):format(cost.age)) }
+    lines[#lines + 1] = { ns.Color(ORANGE, ("  Price %d days old"):format(cost.age)) }
   end
 end
 
@@ -227,18 +230,18 @@ end
 --- there is more than one.
 local function costLines(lines, parts)
   if not ns.HasPrices() then
-    lines[#lines + 1] = { ns.Color(GOLD, "Estimated cost"), ns.Color(GREY, "scan the auction house") }
+    lines[#lines + 1] = { ns.Color(GOLD, "Cost"), ns.Color(GREY, "Scan the AH.") }
     return
   end
   local total, known, missing = 0, false, false
   for _, part in ipairs(parts) do
     if part[2] then total, known = total + part[2], true else missing = true end
   end
-  local text = known and (ns.Money(total) .. (missing and " + ?" or "")) or ns.Color(GREY, "no price")
-  lines[#lines + 1] = { ns.Color(GOLD, "Estimated cost"), text }
+  local text = known and (ns.Coins(total) .. (missing and " + ?" or "")) or ns.Color(GREY, "no price")
+  lines[#lines + 1] = { ns.Color(GOLD, "Cost"), text }
   if #parts > 1 then
     for _, part in ipairs(parts) do
-      lines[#lines + 1] = { "  " .. part[1], part[2] and ns.Money(part[2]) or ns.Color(GREY, "no price") }
+      lines[#lines + 1] = { "  " .. part[1], part[2] and ns.Coins(part[2]) or ns.Color(GREY, "no price") }
     end
   end
 end
@@ -253,8 +256,8 @@ local function holdingLines(lines, label, id, need)
   end
   lines[#lines + 1] = { ns.Color(GOLD, label), count }
   for _, h in ipairs(held.chars) do
-    lines[#lines + 1] = { ns.Color(GREY, ("  %s: bags %d, bank %d, mailbox %s"):format(h.name,
-      h.bags, h.bank, h.mailSeen and tostring(h.mail) or "not checked yet")) }
+    lines[#lines + 1] = { ns.Color(GREY, ("  %s: bags %d, bank %d, mail %s"):format(h.name,
+      h.bags, h.bank, h.mailSeen and tostring(h.mail) or "?")) }
   end
 end
 
@@ -265,7 +268,7 @@ local function ownedText(id)
   local held = ns.AccountHoldings(id)
   if held.total == 0 then return "" end
   local parts, rest, named = {}, held.total, 0
-  local names = ns.db.ownerNames == 2 and 2 or 1
+  local names = 1
   for _, h in ipairs(held.chars) do
     if h.current then
       parts[#parts + 1] = tostring(h.total)
@@ -310,11 +313,11 @@ local function writEntry(writ, sort, cost)
   else
     second = ("%s %d"):format(writ.profession, writ.skill)
   end
-  local tip = "Craftsman's Writ: " .. writ.name .. "\nCan be handed in once a day."
+  local tip = "Craftsman's Writ: " .. writ.name .. "\nDaily."
   if npc then
-    tip = tip .. ("\nHand in to %s, %s (%.1f, %.1f)."):format(npc.name, npc.zone, npc.x, npc.y)
+    tip = tip .. ("\nTurn in: %s, %s (%.1f, %.1f)"):format(npc.name, npc.zone, npc.x, npc.y)
   else
-    tip = tip .. "\nTurn-in not known yet. It is saved when you accept the writ's quest."
+    tip = tip .. "\nTurn-in unknown. Saved when you accept the quest."
   end
   if writ.side then
     tip = tip .. "\n" .. (writ.side == "A" and "Alliance only." or "Horde only.")
@@ -324,9 +327,9 @@ local function writEntry(writ, sort, cost)
     item = writ.item,
     tip = function()
       if ns.AuctionHouseOpen() and ns.CanBuy() then
-        return tip .. "\n|cff40d040Click to buy writs and the material they ask for.|r"
+        return tip .. "\n|cff40d040Click: buy.|r"
       end
-      return npc and (tip .. "\nClick to open the map.") or tip
+      return npc and (tip .. "\nClick: map.") or tip
     end,
     lines = function()
       local lines = { { " " } }
@@ -334,8 +337,8 @@ local function writEntry(writ, sort, cost)
       costLines(lines, { { "Writ", now.writ }, { name, now.material } })
       per100Lines(lines, now, itemName)
       lines[#lines + 1] = { " " }
-      holdingLines(lines, "Writs owned", writ.writItem)
-      holdingLines(lines, itemName .. " owned", writ.item, writ.count)
+      holdingLines(lines, "Owned: writ", writ.writItem)
+      holdingLines(lines, "Owned: " .. itemName, writ.item, writ.count)
       return lines
     end,
     cells = {
@@ -344,7 +347,7 @@ local function writEntry(writ, sort, cost)
       "+" .. ns.WRIT_REP[writ.tier],
       costText(cost),
       ownedText(writ.writItem),
-      npc and npc.zone or ns.Color(GREY, "Not known yet"),
+      npc and npc.zone or ns.Color(GREY, "Unknown"),
       STATE_TEXT[ns.WritState(writ)],
     },
     click = function()
@@ -357,20 +360,16 @@ local function writEntry(writ, sort, cost)
   }
 end
 
--- Item, profession or level, reputation, cost per 100 reputation, owned, region, today.
+-- Writ, profession or tier, rep, cost per 100 rep, owned, zone, today.
 local WRIT_COLUMNS = { 0, 195, 290, 328, 432, 548, 655, 710 }
 
-local COST_TIP = "What 100 reputation costs through this writ: the writ and what it asks for, "
-  .. "at auction house prices from your own scan, or from Auctionator when it is installed and saw "
-  .. "the item more recently.\n\n"
-  .. "+ ?  the writ or its material has no price, so this is only part of the cost.\n"
-  .. "*  a price it uses was last seen %d or more days ago."
+local COST_TIP = "Writ and material per 100 rep, at AH prices (your scan or Auctionator, newest).\n"
+  .. "+ ?  a part has no price.\n"
+  .. "*  a price is %d+ days old."
 --- The Owned heading's tip, for writs or crates.
 local function ownedTip(what)
-  return what .. " on every character of this account: bags, bank and mailbox. A number on "
-    .. "its own is on this character; another character is named, and counts as it was when "
-    .. "last logged in. Tick Show both names below the writs list, or type /pwc names, to "
-    .. "name two other characters instead of one."
+  return what .. " on all characters: bags, bank, mail.\nA number alone: this character.\n"
+    .. "Show both names: first name and surname."
 end
 
 --- Where a writ goes when sorted by cost: 1 every part priced, 2 a part unpriced, 3 none.
@@ -380,15 +379,15 @@ local function costRank(cost)
 end
 local COST_GROUPS = { "priced", "partial", "none" }
 local COST_HEADERS = {
-  priced = "Cheapest reputation first",
-  partial = "Price incomplete: the writ or its material has none",
-  none = "No price yet",
+  priced = "Priced",
+  partial = "Price incomplete",
+  none = "No price",
 }
 
 pages.writs = {
   title = "Craftsman's Writs",
   sortKey = "writSort",
-  sorts = { { "level", "By level" }, { "profession", "By profession" }, { "cost", "By cost" } },
+  sorts = { { "level", "By tier" }, { "profession", "By profession" }, { "cost", "By cost" } },
   footer = "scan",
   build = function()
     local sort = ns.db.writSort
@@ -436,16 +435,16 @@ pages.writs = {
         elseif sort == "profession" then
           header = writ.profession
         else
-          header = ("%s  (+%d reputation each)"):format(ns.WRIT_TIERS[writ.tier], ns.WRIT_REP[writ.tier])
+          header = ("%s  +%d rep each"):format(ns.WRIT_TIERS[writ.tier], ns.WRIT_REP[writ.tier])
         end
         entries[#entries + 1], folded = groupHeader("writs", sort, group, header)
       end
       if not folded then entries[#entries + 1] = writEntry(writ, sort, costs[writ]) end
     end
     local headings = {
-      "Writ", sort == "profession" and "Level" or "Profession", "Rep",
+      "Writ", sort == "profession" and "Tier" or "Profession", "Rep",
       { "Cost / 100 rep", COST_TIP:format(ns.OLD_PRICE_DAYS) },
-      { "Owned", ownedTip("Writs") }, "Region", "Today",
+      { "Owned", ownedTip("Writs") }, "Zone", "Today",
     }
     return entries, WRIT_COLUMNS, nil, headings
   end,
@@ -457,13 +456,11 @@ local CRATE_COLUMNS = { 0, 290, 400, 500, 710 }
 local function favorText(tier)
   local amounts = ns.CrateFavor(tier)
   if #amounts == 0 then
-    return ns.Color(GREY, "Favor not known yet"),
-      "Nobody has recorded the Merchant's Favor for this tier yet. It is saved when you deliver one."
+    return ns.Color(GREY, "Unknown"), "Merchant's Favor unknown. Saved on turn-in."
   end
-  local text = table.concat(amounts, " or ") .. " Favor"
+  local text = table.concat(amounts, " or ")
   if #amounts > 1 then
-    return text, "Merchant's Favor: " .. table.concat(amounts, " or ")
-      .. ", depending on the crate's quality (an uncommon, green crate pays more than a common one)."
+    return text, "Merchant's Favor: " .. table.concat(amounts, " or ") .. ", by crate quality."
   end
   return text, "Merchant's Favor: " .. amounts[1] .. "."
 end
@@ -471,7 +468,7 @@ end
 pages.crates = {
   title = "Waylaid Crates",
   sortKey = "crateSort",
-  sorts = { { "level", "By level" }, { "profession", "By profession" } },
+  sorts = { { "level", "By tier" }, { "profession", "By profession" } },
   build = function()
     local byLevel = ns.db.crateSort == "level"
     local kindOrder = {}
@@ -495,7 +492,7 @@ pages.crates = {
         last = group
         local header
         if byLevel then
-          header = ("%s  (level %d)"):format(ns.CRATE_TIERS[crate.tier], ns.CRATE_LEVEL[crate.tier])
+          header = ("%s  Level %d"):format(ns.CRATE_TIERS[crate.tier], ns.CRATE_LEVEL[crate.tier])
         else
           header = ("%s  (%s)"):format(crate.kind, ns.CRATE_SKILL[crate.kind])
         end
@@ -507,7 +504,7 @@ pages.crates = {
         entries[#entries + 1] = {
           icon = icon,
           item = crate.item,
-          tip = "Requires one of the items listed below it.\n" .. favorTip,
+          tip = "Needs one material below.\n" .. favorTip,
           lines = function()
             local lines = { { " " } }
             local cost = ns.CrateCost(crate)
@@ -537,7 +534,7 @@ pages.crates = {
               local lines = { { " " } }
               local each = ns.Price(bundle.item)
               costLines(lines, { { name, each and each * bundle.count } })
-              if each and bundle.count > 1 then lines[#lines + 1] = { "  Each", ns.Money(each) } end
+              if each and bundle.count > 1 then lines[#lines + 1] = { "  Each", ns.Coins(each) } end
               return lines
             end,
             cells = {
@@ -550,10 +547,10 @@ pages.crates = {
       end
     end
     local camp = ns.Camp()
-    local where = camp and ("Filled crates are delivered to %s at the %s camp, %s (%.1f, %.1f)."):format(camp.name, camp.faction, camp.zone, camp.x, camp.y)
-      or "Filled crates are delivered to your faction's camp."
-    return entries, CRATE_COLUMNS, "A crate requires one of the items listed. " .. where,
-      { "Crate", byLevel and "Profession" or "Level", { "Owned", ownedTip("Crates") }, "Favor" }
+    local where = camp and ("Turn in: %s, %s (%.1f, %.1f)."):format(camp.name, camp.zone, camp.x, camp.y)
+      or "Turn in: your faction's camp."
+    return entries, CRATE_COLUMNS, "One material per crate. " .. where,
+      { "Crate", byLevel and "Profession" or "Level", { "Owned", ownedTip("Crates") }, "Merchant's Favor" }
   end,
 }
 
@@ -568,8 +565,8 @@ pages.turnins = {
       entries[#entries + 1] = { header = "Waylaid Crates" }
       entries[#entries + 1] = {
         icon = "Interface/Icons/INV_Crate_01",
-        tip = camp.faction .. "\nClick to open the map.",
-        cells = { camp.name, camp.zone, ("%.1f, %.1f"):format(camp.x, camp.y), "All filled crates" },
+        tip = camp.faction .. "\nClick: map.",
+        cells = { camp.name, camp.zone, ("%.1f, %.1f"):format(camp.x, camp.y), "All crates" },
         click = function() ns.OpenMap(camp.map) end,
       }
     end
@@ -600,33 +597,95 @@ pages.turnins = {
       for _, writ in ipairs(stop.writs) do
         local state = ns.WritState(writ)
         names[#names + 1] = ns.Color(ns.WRIT_COLOR[writ.tier], writ.name)
-          .. (state == "done" and ns.Color(GREY, " (done today)") or "")
+          .. (state == "done" and ns.Color(GREY, " (done)") or "")
       end
       local status
       if stop.open == 0 then
-        status = ns.Color(GREY, "All done today")
+        status = ns.Color(GREY, "Done")
       elseif stop.held > 0 then
-        status = ns.Color(GREEN, ("%d writ%s in bags"):format(stop.held, stop.held == 1 and "" or "s"))
+        status = ns.Color(GREEN, ("%d in bags"):format(stop.held))
       else
-        status = ("%d of %d available"):format(stop.open, #stop.writs)
+        status = ("%d of %d open"):format(stop.open, #stop.writs)
       end
       entries[#entries + 1] = {
         icon = "Interface/Icons/INV_Misc_Note_01",
-        tip = npc.name .. "\n" .. table.concat(names, "\n") .. "\nClick to open the map.",
+        tip = npc.name .. "\n" .. table.concat(names, "\n") .. "\nClick: map.",
         cells = { npc.name, npc.zone, ("%.1f, %.1f"):format(npc.x, npc.y), status },
         click = function() ns.OpenMap(npc.map) end,
       }
     end
     local known, total = ns.KnownTurnIns()
     return entries, STOP_COLUMNS,
-      ("These places are marked on the world map (/pwc map hides the markers). %d of %d writ turn-ins are known so far."):format(known, total),
-      { "Name", "Zone", "Location", "Status" }
+      ("On the world map (/pwc map). Known turn-ins: %d of %d."):format(known, total),
+      { "NPC", "Zone", "Location", "Today" }
   end,
 }
 
-pages.overview = { title = "Overview" }
+local REWARD_COLUMNS = { 0, 300, 420, 600, 710 }
 
-local MENU_ORDER = { "overview", "writs", "crates", "turnins" }
+--- A reward's price: money, then other costs ("5 Merchant's Favor").
+local function rewardCost(item)
+  local parts = {}
+  if item.price and item.price > 0 then parts[#parts + 1] = ns.Coins(item.price) end
+  for _, c in ipairs(item.costs or {}) do
+    local icon = c.icon and ("|T%s:0|t "):format(tostring(c.icon)) or ""
+    parts[#parts + 1] = ("%s%d %s"):format(icon, c.value, c.name)
+  end
+  return #parts > 0 and table.concat(parts, ", ") or ns.Color(GREY, "Free")
+end
+
+pages.rewards = {
+  title = "Rewards",
+  build = function()
+    local saved, rep = ns.Rewards()
+    local headings = { "Item", "Standing", "Cost", "Status" }
+    if not rep then return {}, REWARD_COLUMNS, "Faction unknown.", headings end
+    if not saved then
+      return {}, REWARD_COLUMNS, "Not seen yet. Open the quartermaster's shop once.", headings
+    end
+    local items = {}
+    for _, item in ipairs(saved.items) do items[#items + 1] = item end
+    table.sort(items, function(a, b)
+      local x, y = a.standing or 0, b.standing or 0
+      if x ~= y then return x < y end
+      return (a.name or "") < (b.name or "")
+    end)
+    local entries, last, folded = {}, nil, false
+    for _, item in ipairs(items) do
+      local group = item.standing or 0
+      if group ~= last then
+        last = group
+        entries[#entries + 1], folded = groupHeader("rewards", "standing", group,
+          group == 0 and "No standing required" or ns.StandingName(group))
+      end
+      if not folded then
+        local name, icon = ns.Item(item.id, item.name)
+        local quality = GetItemInfo and select(3, GetItemInfo(item.id))
+        local color = quality and ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[quality]
+        if color and color.hex then name = color.hex .. name .. "|r" end
+        if (item.quantity or 1) > 1 then name = item.quantity .. " x " .. name end
+        local open = not item.standing or rep.standing >= item.standing
+        entries[#entries + 1] = {
+          icon = icon or item.icon,
+          item = item.id,
+          cells = {
+            name,
+            item.standing and ns.StandingName(item.standing) or ns.Color(GREY, "None"),
+            rewardCost(item),
+            open and ns.Color(GREEN, "Available") or ns.Color(GREY, "Locked"),
+          },
+        }
+      end
+    end
+    local note = ("From %s."):format(saved.npc or "the quartermaster")
+    return entries, REWARD_COLUMNS, note, headings
+  end,
+}
+
+pages.overview = { title = "Overview", panel = "overview" }
+pages.transfer = { title = "Transfer", panel = "transfer" }
+
+local MENU_ORDER = { "overview", "writs", "crates", "turnins", "rewards", "transfer" }
 
 -- ---------------------------------------------------------------------------
 -- The window
@@ -635,7 +694,7 @@ local MENU_ORDER = { "overview", "writs", "crates", "turnins" }
 --- Open the world map on a zone.
 function ns.OpenMap(mapID)
   if InCombatLockdown and InCombatLockdown() then
-    print(ns.TITLE .. ": the map can't be opened from here in combat.")
+    print(ns.TITLE .. ": no map in combat.")
     return
   end
   if not WorldMapFrame:IsShown() then ToggleWorldMap() end
@@ -665,7 +724,7 @@ local function updateScanBar()
     bar.text:SetText(("%d / %d  %s"):format(p.done, p.total, p.item or ""))
     return
   end
-  button:SetText("Scan auction house")
+  button:SetText("Scan AH")
   button:SetEnabled(ns.CanScan() and ns.AuctionHouseOpen())
   local lastScan = ns.LastScanTime()
   bar:SetMinMaxValues(0, 1)
@@ -673,13 +732,13 @@ local function updateScanBar()
   bar:SetStatusBarColor(0.35, 0.35, 0.35)
   local text
   if not ns.CanScan() then
-    text = "This client can't search the auction house."
+    text = "No AH search on this client."
   elseif ns.AuctionHouseOpen() then
-    text = "Ready to scan the prices of every writ and crate."
+    text = "Ready to scan."
   else
-    text = "Open the auction house to scan."
+    text = "Open the AH to scan."
   end
-  if lastScan then text = text .. " Last scan " .. ago(lastScan) .. " ago." end
+  if lastScan then text = text .. " Last scan: " .. ago(lastScan) .. " ago." end
   bar.text:SetText(text)
 end
 
@@ -692,19 +751,21 @@ function refresh()
     if id == key then button:LockHighlight() else button:UnlockHighlight() end
   end
 
+  for name, panel in pairs(panels) do
+    if name ~= page.panel then panel:Hide() end
+  end
   if page.build then
     local entries, columns, text, headings = page.build()
     list:Set(entries, columns, headings)
     note:SetText(text or "")
     list.head:Show()
     list.scroll:Show()
-    overview:Hide()
   else
     list.head:Hide()
     list.scroll:Hide()
     note:SetText("")
-    overview:Show()
-    overview:Refresh()
+    panels[page.panel]:Show()
+    panels[page.panel]:Refresh()
   end
 
   if page.footer == "scan" then
@@ -841,10 +902,14 @@ local function build()
     ns.db.ownerNames = self:GetChecked() and 2 or 1
     refresh()
   end)
-
-  overview = ns.BuildOverview(window, WIDTH - MENU - 22)
-  overview:SetPoint("TOPLEFT", MENU + 8, -66)
-  overview:SetPoint("BOTTOMRIGHT", -14, 14)
+  -- The pages that aren't lists.
+  panels.overview = ns.BuildOverview(window, WIDTH - MENU - 22)
+  panels.transfer = ns.BuildTransfer(window, WIDTH - MENU - 22)
+  for _, panel in pairs(panels) do
+    panel:SetPoint("TOPLEFT", MENU + 8, -66)
+    panel:SetPoint("BOTTOMRIGHT", -14, 14)
+    panel:Hide()
+  end
 
   window:SetScript("OnShow", refresh)
 end

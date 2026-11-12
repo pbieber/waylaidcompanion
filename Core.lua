@@ -119,6 +119,27 @@ function ns.SaveHoldings()
   end
   db.bags[key] = bags
   if bank then db.bank[key] = bank end
+  -- WoW Forever gives the surname where other clients give the realm.
+  local _, surname = UnitName("player")
+  if type(surname) == "string" and surname ~= "" and not (issecretvalue and issecretvalue(surname)) then
+    db.surnames = db.surnames or {}
+    db.surnames[key] = surname
+  end
+end
+
+--- A character's name as the game writes it to address mail: "Name Surname" on WoW
+--- Forever; nil while its surname is unknown (until it is played with this addon).
+function ns.MailAddress(key)
+  local name = key:match("^(.-)%-") or key
+  local surname = ns.db and ns.db.surnames and ns.db.surnames[key]
+  if surname then return name .. " " .. surname end
+end
+
+--- A character as the pages show it: first name, or first name and surname with "Show
+--- both names" ticked (where the surname is known).
+function ns.ShownName(key)
+  if ns.db and ns.db.ownerNames == 2 then return ns.MailAddress(key) or ns.CharacterName(key) end
+  return ns.CharacterName(key)
 end
 
 --- How many of an item the whole account has: { total, chars = { { key, name, bags,
@@ -129,7 +150,7 @@ function ns.AccountHoldings(id)
   local result = { total = 0, chars = {} }
   local function add(key, h)
     if h.total <= 0 then return end
-    h.key, h.name, h.current = key, ns.CharacterName(key), key == me
+    h.key, h.name, h.current = key, ns.ShownName(key), key == me
     result.total = result.total + h.total
     result.chars[#result.chars + 1] = h
   end
@@ -245,6 +266,17 @@ function ns.PriceAge(id)
 end
 
 --- Copper as coloured "12g 34s 56c", leaving out the parts that are zero.
+--- Money with the game's coin icons: "1 [gold] 20 [silver]"; plain text where the game
+--- has no such string.
+function ns.Coins(copper)
+  copper = math.floor((copper or 0) + 0.5)
+  if GetMoneyString then
+    local ok, text = pcall(GetMoneyString, copper, true)
+    if ok and type(text) == "string" then return text end
+  end
+  return ns.Money(copper)
+end
+
 function ns.Money(copper)
   copper = math.floor(copper + 0.5)
   local gold, silver, rest = math.floor(copper / 10000), math.floor(copper / 100) % 100, copper % 100
@@ -562,7 +594,7 @@ end
 -- Saved settings, and telling the pages something changed
 -- ---------------------------------------------------------------------------
 
--- ownerNames: how many characters the writs page names in its Owned column (1 or 2).
+-- ownerNames: 2 shows characters by first name and surname ("Show both names"), 1 by first name.
 local DEFAULTS = { page = "overview", writSort = "level", crateSort = "level", pins = true, ownerNames = 1 }
 
 local listeners = {}
@@ -622,6 +654,8 @@ events:SetScript("OnEvent", function(_, event, arg1)
     db.prices = db.prices or {}
     -- Folded groups on the list pages, by "page:sort:group".
     db.collapsed = db.collapsed or {}
+    -- Each character's surname, by "Name-Realm": WoW Forever mail goes to "Name Surname".
+    db.surnames = db.surnames or {}
     ns.db = db
     for _, fn in ipairs(loaded) do fn() end
     return
@@ -663,7 +697,7 @@ SlashCmdList.PUGGERWAYLAID = function(msg)
     if ns.MinimapRefresh then ns.MinimapRefresh() end
   elseif msg == "names" then
     ns.db.ownerNames = ns.db.ownerNames == 2 and 1 or 2
-    print(ns.TITLE .. ": the Owned column " .. (ns.db.ownerNames == 2 and "shows both names" or "names one other character") .. ".")
+    print(ns.TITLE .. ": " .. (ns.db.ownerNames == 2 and "first name and surname." or "first name only."))
     ns.Changed()
   elseif msg == "scan" then
     if ns.ToggleScan then ns.ToggleScan() end

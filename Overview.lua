@@ -59,7 +59,7 @@ local function makeGrid(parent, top, rows)
 end
 
 local function tierLabel(tier)
-  return ns.Color(ns.WRIT_COLOR[tier], ns.WRIT_TIERS[tier]) .. ns.Color(GREY, ("  +%d each"):format(ns.WRIT_REP[tier]))
+  return ns.Color(ns.WRIT_COLOR[tier], ns.WRIT_TIERS[tier]) .. ns.Color(GREY, ("  +%d rep"):format(ns.WRIT_REP[tier]))
 end
 
 function ns.BuildOverview(parent, width)
@@ -107,7 +107,7 @@ function ns.BuildOverview(parent, width)
   f.needed = makeGrid(f, -106, 1 + #ns.WRIT_TIERS)
   f.neededNote = f:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
   f.neededNote:SetPoint("TOPLEFT", 10, -106 - (1 + #ns.WRIT_TIERS) * ROW - 4)
-  f.neededNote:SetText("Counted as if every turn-in were of that one tier.")
+  f.neededNote:SetText("If all of one tier.")
 
   local todayTop = -106 - (1 + #ns.WRIT_TIERS) * ROW - 44
   heading("Today", todayTop)
@@ -125,7 +125,7 @@ function ns.BuildOverview(parent, width)
       self.standing:SetText("")
       self.bar:SetValue(0)
       self.bar.text:SetText("")
-      self.toNext:SetText(ns.Color(GREY, "Your character's faction is not known yet."))
+      self.toNext:SetText(ns.Color(GREY, "Faction unknown."))
       self.toExalted:SetText("")
     else
       local standing = ns.StandingName(rep.standing)
@@ -139,22 +139,22 @@ function ns.BuildOverview(parent, width)
       if rep.exalted then
         self.bar:SetValue(1)
         self.bar.text:SetText("Exalted")
-        self.toNext:SetText("You are Exalted. Nothing left to earn.")
+        self.toNext:SetText("Exalted.")
         self.toExalted:SetText("")
       else
         local span = math.max(1, rep.high - rep.low)
         local into = math.max(0, rep.value - rep.low)
         self.bar:SetValue(into / span)
         self.bar.text:SetText(("%s / %s"):format(number(into), number(span)))
-        self.toNext:SetText(("%s reputation to %s"):format(number(rep.toNext), nextName))
-        self.toExalted:SetText(("%s reputation to Exalted"):format(number(rep.toExalted)))
+        self.toNext:SetText(("%s rep to %s"):format(number(rep.toNext), nextName))
+        self.toExalted:SetText(("%s rep to Exalted"):format(number(rep.toExalted)))
         if rep.unknown then
-          self.toNext:SetText(("No standing with them yet. %s reputation to %s"):format(number(rep.toNext), nextName))
+          self.toNext:SetText(("No standing yet. %s rep to %s"):format(number(rep.toNext), nextName))
         end
       end
 
       local nextIsExalted = rep.standing + 1 >= 8
-      self.needed:Row(1, "Writ tier", rep.exalted and "" or ("To reach " .. nextName), (rep.exalted or nextIsExalted) and "" or "To reach Exalted")
+      self.needed:Row(1, "Tier", rep.exalted and "" or ("To " .. nextName), (rep.exalted or nextIsExalted) and "" or "To Exalted")
       for tier = 1, tiers do
         if rep.exalted then
           self.needed:Row(1 + tier, tierLabel(tier), ns.Color(GREY, "none"), "")
@@ -166,23 +166,23 @@ function ns.BuildOverview(parent, width)
       end
     end
     if not rep then
-      self.needed:Row(1, "Writ tier", "", "")
+      self.needed:Row(1, "Tier", "", "")
       for tier = 1, tiers do self.needed:Row(1 + tier, tierLabel(tier), "", "") end
     end
 
     if today.open == 0 then
-      self.todayLine:SetText("Every daily turn-in is done for today.")
+      self.todayLine:SetText("All done today.")
     else
-      self.todayLine:SetText(("%s daily turn-in%s still available, worth %s reputation."):format(
+      self.todayLine:SetText(("Open today: %s turn-in%s, %s rep."):format(
         ns.Color("ff40d040", number(today.open)), today.open == 1 and "" or "s",
         ns.Color("ff40d040", number(today.rep))))
     end
-    self.today:Row(1, "Writ tier", "Turn-ins available", "Reputation still to gain")
+    self.today:Row(1, "Tier", "Open", "Rep left")
     for tier = 1, tiers do
       local t = today[tier]
       self.today:Row(1 + tier, tierLabel(tier), ("%d of %d"):format(t.open, t.total), number(t.rep))
     end
-    self.today:Row(2 + tiers, "All writs", ("%d of %d"):format(today.open, today.total), number(today.rep))
+    self.today:Row(2 + tiers, "All", ("%d of %d"):format(today.open, today.total), number(today.rep))
   end
 
   return f
