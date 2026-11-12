@@ -15,6 +15,8 @@ to one shared list, which draws them with pooled rows.
 local _, ns = ...
 if not CreateFrame then return end
 
+local GetItemInfo = (C_Item and C_Item.GetItemInfo) or GetItemInfo
+
 local WIDTH, HEIGHT, MENU = 920, 560, 170
 local ROW, CELLS, HEAD = 20, 7, 18
 local GREY, GOLD, GREEN, ORANGE = "ff808080", "ffffd100", "ff40d040", "ffff8040"

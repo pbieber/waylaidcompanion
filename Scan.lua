@@ -41,7 +41,7 @@ function ns.ItemKey(id)
   return itemKeys[id]
 end
 
-local GetItemInfo = GetItemInfo or (C_Item and C_Item.GetItemInfo)
+local GetItemInfo = (C_Item and C_Item.GetItemInfo) or GetItemInfo
 
 --- Call fn whenever the scan's progress changes.
 function ns.OnScan(fn)

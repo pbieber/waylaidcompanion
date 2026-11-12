@@ -32,9 +32,9 @@ end
 -- The game's functions, under whichever name this client has them
 -- ---------------------------------------------------------------------------
 
-local GetItemInfo = GetItemInfo or (C_Item and C_Item.GetItemInfo)
-local GetItemCount = GetItemCount or (C_Item and C_Item.GetItemCount)
-local GetItemIcon = GetItemIcon or (C_Item and C_Item.GetItemIconByID)
+local GetItemInfo = (C_Item and C_Item.GetItemInfo) or GetItemInfo
+local GetItemCount = (C_Item and C_Item.GetItemCount) or GetItemCount
+local GetItemIcon = (C_Item and C_Item.GetItemIconByID) or GetItemIcon
 local IsQuestDone = (C_QuestLog and C_QuestLog.IsQuestFlaggedCompleted) or IsQuestFlaggedCompleted
 
 --- An item's name and icon. The name is the game's once it has loaded the item, until

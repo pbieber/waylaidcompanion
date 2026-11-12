@@ -30,7 +30,7 @@ local CAN = AH ~= nil and AH.SendSearchQuery ~= nil and AH.MakeItemKey ~= nil
 local TIMEOUT = 8       -- seconds to wait for the auction house before giving up
 local PAY_TIMEOUT = 20  -- seconds to wait for a purchase to be confirmed
 local ADDON = ...
-local GetItemInfo = GetItemInfo or (C_Item and C_Item.GetItemInfo)
+local GetItemInfo = (C_Item and C_Item.GetItemInfo) or GetItemInfo
 local RED, GREY = "ffff4040", "ff808080"
 
 local buy = nil       -- the purchase under way, or nil
