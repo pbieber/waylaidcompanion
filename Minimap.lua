@@ -46,6 +46,15 @@ ring:SetTexture("Interface/Minimap/MiniMap-TrackingBorder")
 ring:SetSize(53, 53)
 ring:SetPoint("TOPLEFT")
 
+-- A W for Waylaid, in the icon's lower right, above the ring so the ring can't hide it.
+local letter = button:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+letter:SetDrawLayer("OVERLAY", 7)
+local font = letter:GetFont()
+if font then letter:SetFont(font, 11, "OUTLINE") end
+letter:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", 3, -2)
+letter:SetText("W")
+letter:SetTextColor(1, 0.82, 0)
+
 local function place()
   local degrees = ns.db and ns.db.minimap.angle or 215
   local square = GetMinimapShape and GetMinimapShape() == "SQUARE"

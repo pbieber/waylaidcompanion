@@ -51,20 +51,111 @@ function ns.Count(id)
   return GetItemCount and GetItemCount(id) or 0
 end
 
-local function character()
-  local name = UnitName and UnitName("player") or "?"
-  return name .. "-" .. (GetRealmName and GetRealmName() or "?")
+local function realm()
+  return GetRealmName and GetRealmName() or "?"
 end
 
+local function character()
+  local name = UnitName and UnitName("player") or "?"
+  return name .. "-" .. realm()
+end
+ns.Character = character
+
+--- A saved character key ("Name-Realm") as shown: the name alone on the player's realm.
+function ns.CharacterName(key)
+  local name, at = key:match("^(.-)%-(.+)$")
+  if not name then return key end
+  return at == realm() and name or key
+end
+
+local bankOpen = false
+
 --- How many of an item this character has, and where: { bags, bank, mail, total,
---- mailSeen }. The bank count is the game's own, kept from the last visit. The mailbox
---- is what was in it when it was last open; mailSeen is false until it has been opened.
+--- mailSeen }. The bank is what it held when last open, or the game's own count before
+--- that. The mailbox is what was in it when it was last open; mailSeen is false until
+--- it has been opened.
 function ns.Holdings(id)
   local bags = ns.Count(id)
-  local bank = math.max(0, (GetItemCount and GetItemCount(id, true) or bags) - bags)
+  local kept = ns.db and ns.db.bank and ns.db.bank[character()]
+  local bank
+  if kept and not bankOpen then
+    bank = kept[id] or 0
+  else
+    bank = math.max(0, (GetItemCount and GetItemCount(id, true) or bags) - bags)
+  end
   local seen = ns.db and ns.db.mail and ns.db.mail[character()]
   local mail = seen and seen[id] or 0
   return { bags = bags, bank = bank, mail = mail, total = bags + bank + mail, mailSeen = seen ~= nil }
+end
+
+-- The items whose count is kept for every character: the writs and what they ask for,
+-- and the crates.
+local tracked
+local function trackedItems()
+  if not tracked then
+    tracked = {}
+    for _, writ in ipairs(ns.writs) do
+      tracked[writ.writItem], tracked[writ.item] = true, true
+    end
+    for _, crate in ipairs(ns.crates) do tracked[crate.item] = true end
+  end
+  return tracked
+end
+
+--- Note what this character holds of the tracked items, so other characters on the
+--- account can count it: the bags always, the bank while it is open.
+function ns.SaveHoldings()
+  local db = ns.db
+  if not db or not GetItemCount then return end
+  local key = character()
+  local bags, bank = {}, bankOpen and {} or nil
+  for id in pairs(trackedItems()) do
+    local inBags = GetItemCount(id) or 0
+    if inBags > 0 then bags[id] = inBags end
+    if bank then
+      local inBank = math.max(0, (GetItemCount(id, true) or inBags) - inBags)
+      if inBank > 0 then bank[id] = inBank end
+    end
+  end
+  db.bags[key] = bags
+  if bank then db.bank[key] = bank end
+end
+
+--- How many of an item the whole account has: { total, chars = { { key, name, bags,
+--- bank, mail, total, mailSeen, current }, ... } }, holding characters only, this one
+--- first and then the most first. Other characters count as they were last logged in.
+function ns.AccountHoldings(id)
+  local me = character()
+  local result = { total = 0, chars = {} }
+  local function add(key, h)
+    if h.total <= 0 then return end
+    h.key, h.name, h.current = key, ns.CharacterName(key), key == me
+    result.total = result.total + h.total
+    result.chars[#result.chars + 1] = h
+  end
+  add(me, ns.Holdings(id))
+  local db = ns.db
+  if db then
+    local keys = {}
+    for _, source in ipairs({ db.bags, db.bank, db.mail }) do
+      for key in pairs(source) do
+        if key ~= me then keys[key] = true end
+      end
+    end
+    for key in pairs(keys) do
+      local bags = db.bags[key] and db.bags[key][id] or 0
+      local bank = db.bank[key] and db.bank[key][id] or 0
+      local seen = db.mail[key]
+      local mail = seen and seen[id] or 0
+      add(key, { bags = bags, bank = bank, mail = mail, total = bags + bank + mail, mailSeen = seen ~= nil })
+    end
+  end
+  table.sort(result.chars, function(a, b)
+    if a.current ~= b.current then return a.current end
+    if a.total ~= b.total then return a.total > b.total end
+    return a.key < b.key
+  end)
+  return result
 end
 
 local mailOpen = false
@@ -94,32 +185,63 @@ local function auctionator()
   return api and api.GetAuctionPriceByItemID and api or nil
 end
 
---- Whether there is anything to ask for prices (Auctionator).
-function ns.HasPrices()
-  return auctionator() ~= nil
-end
-
---- What one of an item costs on the auction house, in copper, as Auctionator last saw
---- it; nil when it has no price for it.
-function ns.Price(id)
-  local api = auctionator()
-  if not api then return nil end
-  local ok, price = pcall(api.GetAuctionPriceByItemID, ADDON, id)
-  if ok and type(price) == "number" and price > 0 then return price end
-  return nil
-end
-
--- A price Auctionator last saw this many days ago, or longer, counts as old.
+-- A price last seen this many days ago, or longer, counts as old.
 ns.OLD_PRICE_DAYS = 3
 
---- How many days ago Auctionator last saw an item on the auction house (0 for today);
---- nil when it can't say.
+local function now()
+  return time and time() or os.time()
+end
+
+--- The prices this addon's own auction house scans found, for the auction house the
+--- player uses (each realm and side has its own): { [item] = { copper, when } }, where
+--- copper 0 means nothing was listed.
+function ns.ScannedPrices()
+  local db = ns.db
+  if not db then return nil end
+  local scope = realm() .. "-" .. (ns.Side() or "?")
+  db.prices[scope] = db.prices[scope] or {}
+  return db.prices[scope]
+end
+
+--- Whether there is anywhere to get prices: Auctionator, or a scan of our own.
+function ns.HasPrices()
+  return auctionator() ~= nil or next(ns.ScannedPrices() or {}) ~= nil
+end
+
+--- What one of an item costs on the auction house, in copper, and how many days ago that
+--- price was seen (nil when unknown). The newer of our own scan and Auctionator's;
+--- nil when neither has seen one listed.
+function ns.PriceInfo(id)
+  local own = (ns.ScannedPrices() or {})[id]
+  local ownPrice = own and own[1] > 0 and own[1] or nil
+  local ownDays = own and math.max(0, math.floor((now() - own[2]) / 86400)) or nil
+
+  local api, aucPrice, aucDays = auctionator(), nil, nil
+  if api then
+    local ok, price = pcall(api.GetAuctionPriceByItemID, ADDON, id)
+    if ok and type(price) == "number" and price > 0 then aucPrice = price end
+    if aucPrice and api.GetAuctionAgeByItemID then
+      local okAge, days = pcall(api.GetAuctionAgeByItemID, ADDON, id)
+      if okAge and type(days) == "number" and days >= 0 then aucDays = days end
+    end
+  end
+
+  if ownPrice and (not aucPrice or aucDays == nil or ownDays <= aucDays) then
+    return ownPrice, ownDays
+  end
+  if aucPrice then return aucPrice, aucDays end
+  return nil, nil
+end
+
+--- What one of an item costs on the auction house, in copper; nil when there is no price.
+function ns.Price(id)
+  return (ns.PriceInfo(id))
+end
+
+--- How many days ago an item's price was seen (0 for today); nil when it can't say.
 function ns.PriceAge(id)
-  local api = auctionator()
-  if not api or not api.GetAuctionAgeByItemID then return nil end
-  local ok, days = pcall(api.GetAuctionAgeByItemID, ADDON, id)
-  if ok and type(days) == "number" and days >= 0 then return days end
-  return nil
+  local _, days = ns.PriceInfo(id)
+  return days
 end
 
 --- Copper as coloured "12g 34s 56c", leaving out the parts that are zero.
@@ -136,13 +258,13 @@ end
 --- What a writ costs to do from nothing: { writ, each, material (each x count), total
 --- (of the parts with a price), partial (a part has none), age (days since the oldest
 --- of its prices was seen, nil when unknown), old (that is OLD_PRICE_DAYS or more),
---- perRep (total for each point of reputation; nil when no part has a price) }.
+--- per100 (total for each 100 reputation; nil when no part has a price) }.
 function ns.WritCost(writ)
-  local paper, each = ns.Price(writ.writItem), ns.Price(writ.item)
+  local paper, paperAge = ns.PriceInfo(writ.writItem)
+  local each, eachAge = ns.PriceInfo(writ.item)
   local material = each and each * writ.count
   local age
-  for _, id in ipairs({ paper and writ.writItem or false, each and writ.item or false }) do
-    local days = id and ns.PriceAge(id)
+  for _, days in ipairs({ paper and paperAge or false, each and eachAge or false }) do
     if days and (not age or days > age) then age = days end
   end
   local total = (paper or 0) + (material or 0)
@@ -150,7 +272,7 @@ function ns.WritCost(writ)
     writ = paper, each = each, material = material,
     total = total, partial = not (paper and material),
     age = age, old = age ~= nil and age >= ns.OLD_PRICE_DAYS,
-    perRep = (paper or material) and total / ns.WRIT_REP[writ.tier] or nil,
+    per100 = (paper or material) and total * 100 / ns.WRIT_REP[writ.tier] or nil,
   }
 end
 
@@ -440,7 +562,8 @@ end
 -- Saved settings, and telling the pages something changed
 -- ---------------------------------------------------------------------------
 
-local DEFAULTS = { page = "overview", writSort = "level", crateSort = "level", pins = true }
+-- ownerNames: how many characters the writs page names in its Owned column (1 or 2).
+local DEFAULTS = { page = "overview", writSort = "level", crateSort = "level", pins = true, ownerNames = 1 }
 
 local listeners = {}
 --- Call fn whenever what the pages show may have changed (bags, quests, item names).
@@ -455,6 +578,7 @@ function ns.Changed()
   pending = true
   C_Timer.After(0.2, function()
     pending = false
+    ns.SaveHoldings()
     for _, fn in ipairs(listeners) do fn() end
   end)
 end
@@ -473,7 +597,7 @@ local QUEST_EVENTS = { PLAYER_ENTERING_WORLD = true, QUEST_ACCEPTED = true, QUES
 local events = CreateFrame("Frame")
 for _, event in ipairs({ "ADDON_LOADED", "PLAYER_LOGIN", "BAG_UPDATE", "QUEST_TURNED_IN", "GET_ITEM_INFO_RECEIVED",
   "UPDATE_FACTION", "QUEST_COMPLETE", "CHAT_MSG_CURRENCY", "PLAYER_ENTERING_WORLD", "QUEST_ACCEPTED", "QUEST_LOG_UPDATE", "QUEST_POI_UPDATE",
-  "MAIL_SHOW", "MAIL_INBOX_UPDATE", "MAIL_CLOSED", "BANKFRAME_OPENED", "PLAYERBANKSLOTS_CHANGED" }) do
+  "MAIL_SHOW", "MAIL_INBOX_UPDATE", "MAIL_CLOSED", "BANKFRAME_OPENED", "BANKFRAME_CLOSED", "PLAYERBANKSLOTS_CHANGED" }) do
   -- Registering an event this client does not have is an error.
   pcall(events.RegisterEvent, events, event)
 end
@@ -491,6 +615,13 @@ events:SetScript("OnEvent", function(_, event, arg1)
     db.favor = db.favor or {}
     db.mail = db.mail or {}
     db.anySide = db.anySide or {}
+    -- Per character ("Name-Realm"): the tracked items in the bags, and in the bank as it
+    -- was when last open. Prices are per auction house ("Realm-A" / "Realm-H").
+    db.bags = db.bags or {}
+    db.bank = db.bank or {}
+    db.prices = db.prices or {}
+    -- Folded groups on the list pages, by "page:sort:group".
+    db.collapsed = db.collapsed or {}
     ns.db = db
     for _, fn in ipairs(loaded) do fn() end
     return
@@ -498,6 +629,13 @@ events:SetScript("OnEvent", function(_, event, arg1)
   -- The inbox only fills in after MAIL_SHOW, and reads as empty once it is closed.
   if event == "MAIL_SHOW" then mailOpen = true return end
   if event == "MAIL_CLOSED" then mailOpen = false return end
+  -- The bank is noted while it is open; closing it keeps what was noted.
+  if event == "BANKFRAME_OPENED" then bankOpen = true end
+  if event == "BANKFRAME_CLOSED" then
+    ns.SaveHoldings()
+    bankOpen = false
+    return
+  end
   if event == "MAIL_INBOX_UPDATE" then scanMail() end
   if QUEST_EVENTS[event] and ns.LocateSoon then ns.LocateSoon() end
   if event == "QUEST_COMPLETE" then return ns.CrateOffered and ns.CrateOffered() end
@@ -523,6 +661,12 @@ SlashCmdList.PUGGERWAYLAID = function(msg)
     ns.db.minimap.hide = not ns.db.minimap.hide
     print(ns.TITLE .. ": minimap button " .. (ns.db.minimap.hide and "hidden" or "shown") .. ".")
     if ns.MinimapRefresh then ns.MinimapRefresh() end
+  elseif msg == "names" then
+    ns.db.ownerNames = ns.db.ownerNames == 2 and 1 or 2
+    print(ns.TITLE .. ": the Owned column " .. (ns.db.ownerNames == 2 and "shows both names" or "names one other character") .. ".")
+    ns.Changed()
+  elseif msg == "scan" then
+    if ns.ToggleScan then ns.ToggleScan() end
   elseif msg == "where" then
     ns.Where()
   elseif ns.Toggle then

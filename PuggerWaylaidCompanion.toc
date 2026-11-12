@@ -4,6 +4,7 @@
 ## Author: Peter
 ## Version: 0.4.0
 ## IconTexture: Interface/AddOns/PuggerWaylaidCompanion/Media/pugger
+## Category-enUS: Auctions
 ## SavedVariables: PuggerWaylaidCompanionDB
 ## OptionalDeps: Auctionator
 ## AddonCompartmentFunc: PuggerWaylaidCompanion_OnAddonCompartmentClick
@@ -13,6 +14,8 @@ Data/Crates.lua
 Data/Recorded.lua
 Core.lua
 Learn.lua
+Scan.lua
+Buy.lua
 Overview.lua
 UI.lua
 Map.lua
