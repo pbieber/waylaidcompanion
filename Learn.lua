@@ -19,8 +19,19 @@ local UNNAMED = "Writ customer"
 -- Two map points this close (in map percent) are the same place.
 local NEAR = 1.0
 
+--- The value, or nil when the game hands it out as a secret: newer clients do that for
+--- unit GUIDs and names in some windows, and an addon that so much as turns one into
+--- text is stopped with an error.
+local function readable(v)
+  if v == nil then return nil end
+  if issecretvalue and issecretvalue(v) then return nil end
+  if canaccessvalue and not canaccessvalue(v) then return nil end
+  return v
+end
+
 local function npcId(guid)
-  if not guid then return nil end
+  guid = readable(guid)
+  if type(guid) ~= "string" then return nil end
   local kind, _, _, _, _, id = strsplit("-", guid)
   if kind ~= "Creature" and kind ~= "Vehicle" and kind ~= "GameObject" then return nil end
   return tonumber(id)
@@ -318,8 +329,8 @@ function ns.Learn(quest)
   old = old or writ.npc
 
   local id = npcId(UnitGUID("npc")) or npcId(UnitGUID("target"))
-  local name = UnitName("npc") or UnitName("target")
-  if not (id and name) then return end
+  local name = readable(UnitName("npc")) or readable(UnitName("target"))
+  if not (id and type(name) == "string") then return end
 
   local spot = old and (db.npcs[old] or ns.WRIT_NPCS[old])
   if spot then
@@ -367,14 +378,29 @@ local function sealedCounts()
   return counts
 end
 
+--- Whether the player stands at the camp, for when the game keeps the NPC's id secret.
+local function atCamp(camp)
+  if not (C_Map and C_Map.GetBestMapForUnit and C_Map.GetPlayerMapPosition) then return false end
+  local map = C_Map.GetBestMapForUnit("player")
+  if map ~= camp.map then return false end
+  local pos = C_Map.GetPlayerMapPosition(map, "player")
+  if not pos then return false end
+  local x, y = pos:GetXY()
+  if not (x and y) then return false end
+  return math.abs(x * 100 - camp.x) < 2 and math.abs(y * 100 - camp.y) < 2
+end
+
 --- The hand-in window of a quest opened: remember the crates if this is the camp.
 function ns.CrateOffered()
   local camp = ns.Camp()
-  if camp and npcId(UnitGUID("npc")) == camp.id then offered = sealedCounts() end
+  if not camp then return end
+  local id = npcId(UnitGUID("npc"))
+  if id == camp.id or (not id and atCamp(camp)) then offered = sealedCounts() end
 end
 
 --- The game announced a currency gain.
 function ns.CurrencyPaid(message)
+  message = readable(message)
   if type(message) ~= "string" or not message:find("Favor") then return end
   paid = { tonumber(message:match("|h|r%s*x(%d+)")) or 1, GetTime() }
 end
