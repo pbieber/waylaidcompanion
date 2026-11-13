@@ -3,10 +3,11 @@ The window: a menu down the left, a page on the right.
 
   Overview           - rep and what is left today (Overview.lua)
   Craftsman's Writs  - every writ, by tier, profession or cost
-  Waylaid Crates     - every crate and its material, by tier or profession
+  Waylaid Crates     - every crate and its material, by tier, profession or cost
   Turn-ins           - where writs and crates go; the same places Map.lua marks
   Rewards            - the quartermaster's items (Rewards.lua)
   Transfer           - mail, bank and buying (Transfer.lua)
+  Options            - how costs and characters are shown (Options.lua), at the menu's foot
 
 Each list page builds plain entries ({ header = ... } or { cells = {...} }) and hands them
 to one shared list, which draws them with pooled rows.
@@ -204,22 +205,37 @@ local STATE_TEXT = {
   open = "",
 }
 
---- The cost per 100 reputation column: the price, "+ ?" when a part of it has no price
---- and "*" when a price it is made of is old.
+--- What a writ's Cost column shows, as the Options page has it: the cost per repScale
+--- reputation, or the writ and its material in all. nil when nothing has a price.
+local function writValue(cost)
+  if not cost.perRep then return nil end
+  if ns.db.writCost == "total" then return cost.total end
+  return cost.perRep * ns.db.repScale
+end
+
+--- The Cost column's heading: "Cost / 100 rep", or "Cost" for the absolute cost.
+local function writCostHeading()
+  if ns.db.writCost == "total" then return "Cost" end
+  return "Cost / " .. ns.ScaleLabel(ns.db.repScale, "rep")
+end
+
+--- The Cost column: the price, "+ ?" when a part of it has no price and "*" when a price
+--- it is made of is old.
 local function costText(cost)
   if not ns.HasPrices() then return "" end
-  if not cost.per100 then return ns.Color(GREY, "no price") end
-  local text = ns.Coins(cost.per100)
+  local value = writValue(cost)
+  if not value then return ns.Color(GREY, "no price") end
+  local text = ns.Coins(value)
   if cost.partial then text = text .. ns.Color(ORANGE, " + ?") end
   if cost.old then text = text .. ns.Color(ORANGE, " *") end
   return text
 end
 
---- Tooltip lines for a writ's cost per 100 reputation, and what is wrong with it if anything.
-local function per100Lines(lines, cost, itemName)
-  if not cost.per100 then return end
-  lines[#lines + 1] = { ns.Color(GOLD, "Cost / 100 rep"),
-    ns.Coins(cost.per100) .. (cost.partial and " + ?" or "") }
+--- Tooltip lines for a writ's cost per reputation, and what is wrong with it if anything.
+local function perRepLines(lines, cost, itemName)
+  if not cost.perRep then return end
+  lines[#lines + 1] = { ns.Color(GOLD, "Cost / " .. ns.ScaleLabel(ns.db.repScale, "rep")),
+    ns.Coins(cost.perRep * ns.db.repScale) .. (cost.partial and " + ?" or "") }
   if cost.partial then
     lines[#lines + 1] = { ns.Color(ORANGE, ("  No price: %s"):format(cost.writ and itemName or "writ")) }
   end
@@ -287,6 +303,42 @@ local function ownedText(id)
   return text
 end
 
+-- Group header icons when sorted by profession: the writs' professions, and the trade
+-- each kind of crate draws on.
+local PROFESSION_HEADER_ICON = {
+  Alchemy = "Interface/Icons/Trade_Alchemy",
+  Blacksmithing = "Interface/Icons/Trade_BlackSmithing",
+  Engineering = "Interface/Icons/Trade_Engineering",
+  Leatherworking = "Interface/Icons/Trade_LeatherWorking",
+  Tailoring = "Interface/Icons/Trade_Tailoring",
+}
+local CRATE_HEADER_ICON = {
+  Herbs = "Interface/Icons/Trade_Herbalism",
+  Ore = "Interface/Icons/Trade_Mining",
+  Ingots = "Interface/Icons/Spell_Fire_FlameBlades",  -- Smelting
+  Textiles = "Interface/Icons/INV_Misc_Pelt_Wolf_01",  -- Skinning
+  Fabrics = "Interface/Icons/Trade_Tailoring",
+  Curiosities = "Interface/Icons/Trade_Engraving",     -- Enchanting
+  Parts = "Interface/Icons/Trade_Engineering",
+}
+
+--- A header's text with an icon before it, when there is one.
+local function withIcon(icon, text)
+  return icon and ("|T%s:16:16|t %s"):format(icon, text) or text
+end
+
+--- An item's name as the Options page has items coloured: by tier (tierHex, or plain
+--- when nil), or in the game's colour for its rarity (plain until the game has the item).
+local function itemColored(id, tierHex, text)
+  if ns.db.itemColor == "rarity" then
+    local quality = GetItemInfo and select(3, GetItemInfo(id))
+    local color = quality and ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[quality]
+    if color and color.hex then return color.hex .. text .. "|r" end
+    return text
+  end
+  return tierHex and ns.Color(tierHex, text) or text
+end
+
 local FOLDED = "|TInterface/Buttons/UI-PlusButton-Up:14:14|t "
 local UNFOLDED = "|TInterface/Buttons/UI-MinusButton-Up:14:14|t "
 
@@ -313,7 +365,9 @@ local function writEntry(writ, sort, cost)
   if sort == "profession" then
     second = ns.Color(ns.WRIT_COLOR[writ.tier], ns.WRIT_TIERS[writ.tier]) .. " " .. writ.skill
   else
-    second = ("%s %d"):format(writ.profession, writ.skill)
+    -- The profession wears the tier's colour, so the tier shows when names are in their
+    -- rarity colour (Options).
+    second = ns.Color(ns.WRIT_COLOR[writ.tier], ("%s %d"):format(writ.profession, writ.skill))
   end
   local tip = "Craftsman's Writ: " .. writ.name .. "\nDaily."
   if npc then
@@ -337,14 +391,14 @@ local function writEntry(writ, sort, cost)
       local lines = { { " " } }
       local now = ns.WritCost(writ)
       costLines(lines, { { "Writ", now.writ }, { name, now.material } })
-      per100Lines(lines, now, itemName)
+      perRepLines(lines, now, itemName)
       lines[#lines + 1] = { " " }
       holdingLines(lines, "Owned: writ", writ.writItem)
       holdingLines(lines, "Owned: " .. itemName, writ.item, writ.count)
       return lines
     end,
     cells = {
-      ns.Color(ns.WRIT_COLOR[writ.tier], name),
+      itemColored(writ.item, ns.WRIT_COLOR[writ.tier], name),
       second,
       "+" .. ns.WRIT_REP[writ.tier],
       costText(cost),
@@ -365,18 +419,24 @@ end
 -- Writ, profession or tier, rep, cost per 100 rep, owned, zone, today.
 local WRIT_COLUMNS = { 0, 195, 290, 328, 432, 548, 655, 710 }
 
-local COST_TIP = "Writ and material per 100 rep, at AH prices (your scan or Auctionator, newest).\n"
-  .. "+ ?  a part has no price.\n"
-  .. "*  a price is %d+ days old."
+--- The Cost heading's tip, as the Options page has the cost shown.
+local function writCostTip()
+  local what = ns.db.writCost == "total" and "Writ and material"
+    or ("Writ and material per " .. ns.ScaleLabel(ns.db.repScale, "rep"))
+  return what .. ", at AH prices (your scan or Auctionator, newest).\n"
+    .. "+ ?  a part has no price.\n"
+    .. ("*  a price is %d+ days old.\n"):format(ns.OLD_PRICE_DAYS)
+    .. "Per rep or absolute, and the scale: Options."
+end
 --- The Owned heading's tip, for writs or crates.
 local function ownedTip(what)
   return what .. " on all characters: bags, bank, mail.\nA number alone: this character.\n"
-    .. "Show both names: first name and surname."
+    .. "Show both names (Options): first name and surname."
 end
 
 --- Where a writ goes when sorted by cost: 1 every part priced, 2 a part unpriced, 3 none.
 local function costRank(cost)
-  if not cost.per100 then return 3 end
+  if not cost.perRep then return 3 end
   return cost.partial and 2 or 1
 end
 local COST_GROUPS = { "priced", "partial", "none" }
@@ -406,7 +466,7 @@ pages.writs = {
         -- figure missing the writ or its material would look cheaper than it is.
         local ra, rb = costRank(costs[a]), costRank(costs[b])
         if ra ~= rb then return ra < rb end
-        local x, y = costs[a].per100, costs[b].per100
+        local x, y = writValue(costs[a]), writValue(costs[b])
         if x and y and x ~= y then return x < y end
       end
       if sort == "profession" then
@@ -435,7 +495,7 @@ pages.writs = {
         if sort == "cost" then
           header = COST_HEADERS[group]
         elseif sort == "profession" then
-          header = writ.profession
+          header = withIcon(PROFESSION_HEADER_ICON[writ.profession], writ.profession)
         else
           header = ("%s  +%d rep each"):format(ns.WRIT_TIERS[writ.tier], ns.WRIT_REP[writ.tier])
         end
@@ -445,20 +505,121 @@ pages.writs = {
     end
     local headings = {
       "Writ", sort == "profession" and "Tier" or "Profession", "Rep",
-      { "Cost / 100 rep", COST_TIP:format(ns.OLD_PRICE_DAYS) },
+      { writCostHeading(), writCostTip() },
       { "Owned", ownedTip("Writs") }, "Zone", "Today",
     }
     return entries, WRIT_COLUMNS, nil, headings
   end,
 }
 
-local CRATE_COLUMNS = { 0, 290, 400, 500, 710 }
+-- Crate, profession or level, favor, cost, owned.
+local CRATE_COLUMNS = { 0, 270, 395, 455, 595, 710 }
+
+local CHEAPEST = "|TInterface/RaidFrame/ReadyCheck-Ready:12:12|t "
+
+--- Whether the crates page shows a cost per favor (the Options page), not the absolute.
+local function perFavor()
+  return ns.db.crateCost ~= "total"
+end
+
+--- The Cost column's heading: "Cost / favor", "Cost / 100 favor", or "Cost".
+local function crateCostHeading()
+  if not perFavor() then return "Cost" end
+  return "Cost / " .. ns.ScaleLabel(ns.db.favorScale, "favor")
+end
+
+--- The Cost heading's tip, as the Options page has the cost shown.
+local function crateCostTip()
+  local what = "The crate and one material"
+  if perFavor() then
+    what = what .. " per " .. ns.ScaleLabel(ns.db.favorScale, "Merchant's Favor")
+      .. " (the least the crate pays)"
+  end
+  return what .. ", at AH prices (your scan or Auctionator, newest).\n"
+    .. "On a crate: its cheapest material. On a material: that one.\n"
+    .. CHEAPEST .. " the crate's cheapest material.\n"
+    .. "+ ?  a part has no price.\n"
+    .. ("*  a price is %d+ days old.\n"):format(ns.OLD_PRICE_DAYS)
+    .. "Per favor or absolute, and the scale: Options."
+end
+
+--- What a crate's or a bundle's Cost column shows: the cost per favorScale favor, or in
+--- all. nil when nothing has a price, or per favor while the favor is unknown.
+local function crateValue(part)
+  if perFavor() then return part.perFavor and part.perFavor * ns.db.favorScale end
+  return (part.total or 0) > 0 and part.total or nil
+end
+
+--- A crate's or a bundle's Cost column: the money, "+ ?" when a part of it has no price
+--- and "*" when a price it is made of is old; per favor, "~" before it when the favor is
+--- an estimate, and "favor ?" while the favor is unknown. `cost` is the crate's.
+local function crateCostText(part, cost)
+  if not ns.HasPrices() then return "" end
+  local value = crateValue(part)
+  if not value then
+    if perFavor() and not cost.favor and (part.total or 0) > 0 then return ns.Color(GREY, "favor ?") end
+    return ns.Color(GREY, "no price")
+  end
+  local text = ns.Coins(value)
+  if perFavor() and cost.favorEstimated then text = ns.Color(GREY, "~") .. text end
+  if part.partial then text = text .. ns.Color(ORANGE, " + ?") end
+  if part.old then text = text .. ns.Color(ORANGE, " *") end
+  return text
+end
+
+--- Tooltip lines for a crate filled with one bundle: what it costs, in all and by part,
+--- and per favorScale favor at every amount its tier is known to pay.
+local function crateCostLines(lines, crate, cost, bundle, name)
+  local part = cost.bundles[bundle] or {}
+  costLines(lines, { { "Crate", cost.crate }, { name, part.material } })
+  if part.each and bundle.count > 1 then lines[#lines + 1] = { "  Each", ns.Coins(part.each) } end
+  if not ns.HasPrices() then return end
+  local label = "Cost / " .. ns.ScaleLabel(ns.db.favorScale, "favor")
+  local amounts, estimated = ns.CrateFavor(crate.tier)
+  if #amounts == 0 then
+    lines[#lines + 1] = { ns.Color(GOLD, label), ns.Color(GREY, "favor unknown") }
+  elseif part.perFavor then
+    for _, amount in ipairs(amounts) do
+      lines[#lines + 1] = { ns.Color(GOLD, ("%s (pays %s%d)"):format(label, estimated and "~" or "", amount)),
+        ns.Coins(part.total / amount * ns.db.favorScale) .. (part.partial and " + ?" or "") }
+    end
+    if estimated then
+      lines[#lines + 1] = { ns.Color(ORANGE, "  Favor estimated. Saved on turn-in.") }
+    end
+  end
+  if part.partial and part.total and part.total > 0 then
+    lines[#lines + 1] = { ns.Color(ORANGE, ("  No price: %s"):format(cost.crate and name or "crate")) }
+  end
+  if part.old then
+    lines[#lines + 1] = { ns.Color(ORANGE, ("  Price %d days old"):format(part.age)) }
+  end
+end
+
+--- Where a crate goes when sorted by cost: 1 priced, 2 a part unpriced, 3 the favor it
+--- pays is unknown (per favor only), 4 no price at all.
+local function crateRank(cost)
+  if crateValue(cost) then return cost.partial and 2 or 1 end
+  if perFavor() and not cost.favor and cost.total > 0 then return 3 end
+  return 4
+end
+local CRATE_COST_GROUPS = { "priced", "partial", "favor", "none" }
+local CRATE_COST_HEADERS = {
+  priced = "Priced, cheapest first",
+  partial = "Price incomplete",
+  favor = "Merchant's Favor unknown, cheapest first",
+  none = "No price",
+}
 
 --- The Merchant's Favor column for a crate tier, and the line for its tooltip.
 local function favorText(tier)
-  local amounts = ns.CrateFavor(tier)
+  local amounts, estimated = ns.CrateFavor(tier)
   if #amounts == 0 then
     return ns.Color(GREY, "Unknown"), "Merchant's Favor unknown. Saved on turn-in."
+  end
+  if estimated then
+    return ns.Color(GREY, "~" .. table.concat(amounts, " or ")),
+      "Merchant's Favor estimated: " .. table.concat(amounts, " or ")
+        .. ", by crate quality (twice the tier below). The real amount is saved on turn-in."
   end
   local text = table.concat(amounts, " or ")
   if #amounts > 1 then
@@ -470,89 +631,155 @@ end
 pages.crates = {
   title = "Waylaid Crates",
   sortKey = "crateSort",
-  sorts = { { "level", "By tier" }, { "profession", "By profession" } },
+  sorts = { { "level", "By tier" }, { "profession", "By profession" }, { "cost", "By cost" } },
+  footer = "scan",
   build = function()
-    local byLevel = ns.db.crateSort == "level"
+    local sort = ns.db.crateSort
+    local byCost = sort == "cost"
     local kindOrder = {}
     for i, kind in ipairs(ns.CRATE_KINDS) do kindOrder[kind] = i end
-    local sorted = {}
-    for _, crate in ipairs(ns.crates) do sorted[#sorted + 1] = crate end
+    local sorted, costs = {}, {}
+    for _, crate in ipairs(ns.crates) do
+      sorted[#sorted + 1] = crate
+      costs[crate] = ns.CrateCost(crate)
+    end
     table.sort(sorted, function(a, b)
-      if byLevel then
-        if a.tier ~= b.tier then return a.tier < b.tier end
+      if byCost then
+        -- Whole prices first, cheapest first (per favor or absolute, as shown); then those
+        -- missing a part; then those whose favor nobody knows yet, by what they cost; then
+        -- no price at all.
+        local ca, cb = costs[a], costs[b]
+        local ra, rb = crateRank(ca), crateRank(cb)
+        if ra ~= rb then return ra < rb end
+        local x, y = crateValue(ca), crateValue(cb)
+        if ra == 3 then x, y = ca.total, cb.total end
+        if x and y and x ~= y then return x < y end
+      end
+      if sort == "profession" then
         if a.kind ~= b.kind then return kindOrder[a.kind] < kindOrder[b.kind] end
+        if a.tier ~= b.tier then return a.tier < b.tier end
       else
-        if a.kind ~= b.kind then return kindOrder[a.kind] < kindOrder[b.kind] end
         if a.tier ~= b.tier then return a.tier < b.tier end
+        if a.kind ~= b.kind then return kindOrder[a.kind] < kindOrder[b.kind] end
       end
       return a.name < b.name
     end)
+    local camp = ns.Camp()
+    local where = camp and ("Turn in: %s, %s (%.1f, %.1f)."):format(camp.name, camp.zone, camp.x, camp.y)
+      or "Turn in: your faction's camp."
     local entries, last, folded = {}, nil, false
     for _, crate in ipairs(sorted) do
-      local group = byLevel and crate.tier or crate.kind
+      local cost = costs[crate]
+      local group
+      if byCost then
+        group = CRATE_COST_GROUPS[crateRank(cost)]
+      elseif sort == "profession" then
+        group = crate.kind
+      else
+        group = crate.tier
+      end
       if group ~= last then
         last = group
         local header
-        if byLevel then
-          header = ("%s  Level %d"):format(ns.CRATE_TIERS[crate.tier], ns.CRATE_LEVEL[crate.tier])
+        if byCost then
+          header = CRATE_COST_HEADERS[group]
+        elseif sort == "profession" then
+          header = withIcon(CRATE_HEADER_ICON[crate.kind],
+            ("%s  (%s)"):format(crate.kind, ns.CRATE_SKILL[crate.kind]))
         else
-          header = ("%s  (%s)"):format(crate.kind, ns.CRATE_SKILL[crate.kind])
+          header = ("%s  Level %d"):format(ns.CRATE_TIERS[crate.tier], ns.CRATE_LEVEL[crate.tier])
         end
-        entries[#entries + 1], folded = groupHeader("crates", ns.db.crateSort, group, header)
+        entries[#entries + 1], folded = groupHeader("crates", sort, group, header)
       end
       if not folded then
         local _, icon = ns.Item(crate.item)
         local favor, favorTip = favorText(crate.tier)
+        -- By profession: the tier and the level it needs. Otherwise the profession, in the
+        -- tier's colour, so the tier shows when names are in their rarity colour (Options).
+        local tierColor = ns.CRATE_COLOR[crate.tier]
+        local second
+        if sort == "profession" then
+          second = ns.Color(tierColor, ns.CRATE_TIERS[crate.tier]) .. ns.Color(GREY, "  Level " .. ns.CRATE_LEVEL[crate.tier])
+        else
+          second = ns.Color(tierColor, ns.CRATE_SKILL[crate.kind])
+        end
         entries[#entries + 1] = {
           icon = icon,
           item = crate.item,
-          tip = "Needs one material below.\n" .. favorTip,
+          tip = "Needs one material below.\n" .. favorTip .. "\n" .. where,
           lines = function()
             local lines = { { " " } }
-            local cost = ns.CrateCost(crate)
-            local b = cost.bundle
-            costLines(lines, {
-              { "Crate", cost.crate },
-              { b and ("%d x %s (cheapest)"):format(b.count, ns.Item(b.item, b.name)) or "Material", cost.material },
-            })
+            local now = ns.CrateCost(crate)
+            local b = now.cheapest
+            if b then
+              crateCostLines(lines, crate, now, b,
+                ("%d x %s (cheapest)"):format(b.count, ns.Item(b.item, b.name)))
+            else
+              costLines(lines, { { "Crate", now.crate }, { "Material", nil } })
+            end
             return lines
           end,
           cells = {
-            ns.Color(ns.CRATE_COLOR[crate.tier], "Waylaid Crate: " .. crate.name),
-            byLevel and ns.CRATE_SKILL[crate.kind] or ("Level " .. ns.CRATE_LEVEL[crate.tier]),
-            ownedText(crate.item),
+            itemColored(crate.item, ns.CRATE_COLOR[crate.tier], "Waylaid Crate: " .. crate.name),
+            second,
             favor,
+            crateCostText(cost, cost),
+            ownedText(crate.item),
           },
         }
-        for _, bundle in ipairs(crate.bundles) do
+        -- Sorted by cost, a crate's materials are too, cheapest first.
+        local bundles = {}
+        for _, bundle in ipairs(crate.bundles) do bundles[#bundles + 1] = bundle end
+        if byCost then
+          table.sort(bundles, function(a, b)
+            local x, y = cost.bundles[a].material, cost.bundles[b].material
+            if (x == nil) ~= (y == nil) then return x ~= nil end
+            if x and y and x ~= y then return x < y end
+            return a.name < b.name
+          end)
+        end
+        for _, bundle in ipairs(bundles) do
           local name, bundleIcon = ns.Item(bundle.item, bundle.name)
+          local label = ("%d x %s"):format(bundle.count, name)
           local have = ns.Count(bundle.item)
           local color = have >= bundle.count and GREEN or (have > 0 and GOLD or GREY)
+          local part = cost.bundles[bundle]
+          local cheapest = bundle == cost.cheapest
           entries[#entries + 1] = {
             icon = bundleIcon,
             item = bundle.item,
             indent = 22,
             lines = function()
               local lines = { { " " } }
-              local each = ns.Price(bundle.item)
-              costLines(lines, { { name, each and each * bundle.count } })
-              if each and bundle.count > 1 then lines[#lines + 1] = { "  Each", ns.Coins(each) } end
+              local now = ns.CrateCost(crate)
+              crateCostLines(lines, crate, now, bundle, label)
+              if now.cheapest == bundle then
+                lines[#lines + 1] = { ns.Color(GREEN, "The cheapest material for this crate.") }
+              elseif now.cheapest then
+                local b = now.cheapest
+                lines[#lines + 1] = { ns.Color(GREY, ("Cheapest: %d x %s"):format(b.count, ns.Item(b.item, b.name))),
+                  ns.Color(GREY, ns.Coins(now.total)) }
+              end
               return lines
             end,
             cells = {
-              ("%d x %s"):format(bundle.count, name),
+              itemColored(bundle.item, nil, label),
               ns.Color(color, ("%d / %d"):format(have, bundle.count)),
+              "",
+              -- A material without a price can't say what filling the crate with it costs.
+              part.material and ((cheapest and CHEAPEST or "") .. crateCostText(part, cost))
+                or (ns.HasPrices() and ns.Color(GREY, "no price") or ""),
               "",
             },
           }
         end
       end
     end
-    local camp = ns.Camp()
-    local where = camp and ("Turn in: %s, %s (%.1f, %.1f)."):format(camp.name, camp.zone, camp.x, camp.y)
-      or "Turn in: your faction's camp."
-    return entries, CRATE_COLUMNS, "One material per crate. " .. where,
-      { "Crate", byLevel and "Profession" or "Level", { "Owned", ownedTip("Crates") }, "Merchant's Favor" }
+    return entries, CRATE_COLUMNS, nil, {
+      "Crate", sort == "profession" and "Tier" or "Profession", "Favor",
+      { crateCostHeading(), crateCostTip() },
+      { "Owned", ownedTip("Crates") },
+    }
   end,
 }
 
@@ -735,8 +962,10 @@ pages.rewards = {
 
 pages.overview = { title = "Overview", panel = "overview" }
 pages.transfer = { title = "Transfer", panel = "transfer" }
+pages.options = { title = "Options", panel = "options" }
 
-local MENU_ORDER = { "overview", "writs", "crates", "turnins", "rewards", "transfer" }
+-- The pages down the menu; Options sits apart at its foot.
+local MENU_ORDER = { "overview", "writs", "crates", "turnins", "rewards", "transfer", "options" }
 
 -- ---------------------------------------------------------------------------
 -- The window
@@ -821,7 +1050,6 @@ function refresh()
 
   if page.footer == "scan" then
     note:Hide()
-    scanBar.names:SetChecked(ns.db.ownerNames == 2)
     scanBar:Show()
     updateScanBar()
   else
@@ -874,7 +1102,11 @@ local function build()
   for i, key in ipairs(MENU_ORDER) do
     local button = CreateFrame("Button", nil, window, "UIPanelButtonTemplate")
     button:SetSize(MENU - 20, 26)
-    button:SetPoint("TOPLEFT", 14, -34 - (i - 1) * 30)
+    if key == "options" then
+      button:SetPoint("BOTTOMLEFT", 14, 14)
+    else
+      button:SetPoint("TOPLEFT", 14, -34 - (i - 1) * 30)
+    end
     button:SetText(pages[key].title)
     button:SetScript("OnClick", function()
       ns.db.page = key
@@ -917,8 +1149,7 @@ local function build()
   note:SetJustifyH("LEFT")
   note:SetJustifyV("MIDDLE")
 
-  -- The writs page's foot: the auction house scan and its progress, and how many
-  -- characters the Owned column names.
+  -- The writs and crates pages' foot: the auction house scan and its progress.
   scanBar = CreateFrame("Frame", nil, window)
   scanBar:SetPoint("BOTTOMLEFT", MENU + 8, 12)
   scanBar:SetPoint("BOTTOMRIGHT", -14, 12)
@@ -932,7 +1163,8 @@ local function build()
 
   scanBar.bar = CreateFrame("StatusBar", nil, scanBar)
   scanBar.bar:SetPoint("LEFT", scanBar.button, "RIGHT", 10, 0)
-  scanBar.bar:SetSize(380, 16)
+  scanBar.bar:SetPoint("RIGHT", scanBar, "RIGHT", 0, 0)
+  scanBar.bar:SetHeight(16)
   scanBar.bar:SetStatusBarTexture("Interface/TargetingFrame/UI-StatusBar")
   local back = scanBar.bar:CreateTexture(nil, "BACKGROUND")
   back:SetAllPoints()
@@ -943,19 +1175,10 @@ local function build()
   scanBar.bar.text:SetJustifyH("LEFT")
   scanBar.bar.text:SetWordWrap(false)
 
-  scanBar.names = CreateFrame("CheckButton", nil, scanBar, "UICheckButtonTemplate")
-  scanBar.names:SetSize(22, 22)
-  scanBar.names:SetPoint("LEFT", scanBar.bar, "RIGHT", 10, 0)
-  local namesLabel = scanBar.names:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  namesLabel:SetPoint("LEFT", scanBar.names, "RIGHT", 2, 0)
-  namesLabel:SetText("Show both names")
-  scanBar.names:SetScript("OnClick", function(self)
-    ns.db.ownerNames = self:GetChecked() and 2 or 1
-    refresh()
-  end)
   -- The pages that aren't lists.
   panels.overview = ns.BuildOverview(window, WIDTH - MENU - 22)
   panels.transfer = ns.BuildTransfer(window, WIDTH - MENU - 22)
+  panels.options = ns.BuildOptions(window, WIDTH - MENU - 22)
   for _, panel in pairs(panels) do
     panel:SetPoint("TOPLEFT", MENU + 8, -66)
     panel:SetPoint("BOTTOMRIGHT", -14, 14)

@@ -7,11 +7,12 @@ A World of Warcraft Classic addon for the two trade factions, Durotar Supply and
 Open the window with `/pwc`, the minimap button or the addon compartment.
 
 - **Overview**: your standing, the turn-ins to the next standing and to Exalted, and what is open today.
-- **Craftsman's Writs**: every writ for your side, by tier, profession or cost: material, rep, cost per 100 rep, owned, zone of the turn-in, today. Click a row: map (or, at the auction house, buy).
-- **Waylaid Crates**: every crate and its material, owned, and the Merchant's Favor it pays.
+- **Craftsman's Writs**: every writ for your side, by tier, profession or cost: material, rep, cost (per 100 rep by default), owned, zone of the turn-in, today. Click a row: map (or, at the auction house, buy).
+- **Waylaid Crates**: every crate, by tier, profession or cost: the Merchant's Favor it pays, its cost with its cheapest material (per favor by default, at the least the crate pays), owned. Each material under a crate shows the crate's cost filled with that one, and the cheapest is ticked. Expert and Artisan crates' favor is an estimate (twice the tier below, shown with ~) until one is turned in.
 - **Turn-ins**: every turn-in, by continent. Also marked on the world map.
 - **Rewards**: what your faction's quartermasters sell, one list per profession, each with its own quartermaster, by standing, with its cost and whether you can buy it. Learned the first time you open each quartermaster's shop.
 - **Transfer**: mail, bank and buying for writs (below).
+- **Options**, at the foot of the menu: show writ and crate costs per reputation and per favor, or absolute; the scale (per 1, 10, 100 or 1000 rep or favor, each on its own); item names by tier colour or in their in-game rarity colour (the tier then shows in the Profession column's colour, or in the Tier column when sorted by profession); and **Show both names**.
 
 Click a group header to fold it.
 
@@ -19,7 +20,7 @@ Click a group header to fold it.
 
 Prices come from the addon's own auction house scan and from [Auctionator](https://www.curseforge.com/wow/addons/auctionator), whichever saw the item more recently. Auctionator is optional: without it, the scan alone fills in every price.
 
-To scan, open the auction house, then press **Scan AH** under the writs list (or type `/pwc scan`). It searches every writ, every material a writ asks for, and every crate and what fills it, one item at a time, with a progress bar beside the button. Several hundred items take a few minutes. Closing the auction house stops the scan and keeps what it found. Prices are kept per realm and side.
+To scan, open the auction house, then press **Scan AH** under the writs or crates list (or type `/pwc scan`). It searches every writ, every material a writ asks for, and every crate and what fills it, one item at a time, with a progress bar beside the button. Several hundred items take a few minutes. Closing the auction house stops the scan and keeps what it found. Prices are kept per realm and side.
 
 In the Cost / 100 rep column:
 
@@ -58,14 +59,14 @@ A *set* is one writ and its material.
 
 ## Writs on other characters
 
-The Owned column counts the writs on every character of the account: bags, bank and mailbox. Another character counts as it was when you last played it, the bank as it was when last open there. A number on its own is on the character you are playing; a writ on another character shows that character's name. Tick **Show both names** under the writs list, or type `/pwc names`, to show first name and surname. The crates page counts crates the same way. The tooltip lists every character and where they keep them, for the writ and for its material.
+The Owned column counts the writs on every character of the account: bags, bank and mailbox. Another character counts as it was when you last played it, the bank as it was when last open there. A number on its own is on the character you are playing; a writ on another character shows that character's name. Tick **Show both names** under Options, or type `/pwc names`, to show first name and surname. The crates page counts crates the same way. The tooltip lists every character and where they keep them, for the writ and for its material.
 
 ## Commands
 
 | Command | What it does |
 | --- | --- |
 | `/pwc` or `/waylaid` | Show or hide the window |
-| `/pwc writs`, `/pwc crates`, `/pwc turnins`, `/pwc rewards`, `/pwc transfer` | Open the window on that page |
+| `/pwc writs`, `/pwc crates`, `/pwc turnins`, `/pwc rewards`, `/pwc transfer`, `/pwc options` | Open the window on that page |
 | `/pwc map` | Show or hide the world map markers |
 | `/pwc minimap` | Show or hide the minimap button |
 | `/pwc scan` | Start or stop the auction house scan |
