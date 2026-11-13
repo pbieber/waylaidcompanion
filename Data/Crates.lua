@@ -110,6 +110,11 @@ ns.CRATES = {
 -- (Learn.lua) and baked into Data/Recorded.lua.
 ns.CRATE_FAVOR = { { 5, 10 }, { 10, 20 } }
 
+-- A guess for the tiers nobody has published, by the doubling from Apprentice to
+-- Journeyman. Used only while neither the data above nor a recorded turn-in knows the
+-- tier, and shown as an estimate ("~").
+ns.CRATE_FAVOR_ESTIMATE = { [3] = { 20, 40 }, [4] = { 40, 80 } }
+
 -- A filled crate is one of fifteen "Sealed <tier> Crate" items: three runs of five tiers
 -- (Apprentice, Journeyman, Expert, Artisan, Elite).
 ns.SEALED_FIRST, ns.SEALED_LAST = 248765, 248779

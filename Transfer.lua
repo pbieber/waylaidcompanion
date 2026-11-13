@@ -596,8 +596,7 @@ end)
 
 local function makeWindow()
   local parent = MailFrame or UIParent
-  window = CreateFrame("Frame", "PuggerWaylaidCompanionMail", parent, "BasicFrameTemplateWithInset")
-  window:SetSize(380, 130)
+  window = ns.Skin.Window("PuggerWaylaidCompanionMail", parent, 380, 130, "Mail")
   if parent == MailFrame then
     window:SetPoint("TOPLEFT", parent, "TOPRIGHT", 8, 0)
   else
@@ -608,14 +607,11 @@ local function makeWindow()
   window:EnableMouse(true)
   window:Hide()
 
-  local title = window:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-  title:SetPoint("TOP", 0, -5)
-  title:SetText("Mail")
-
   window.heading = window:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-  window.heading:SetPoint("TOPLEFT", 16, -34)
-  window.heading:SetPoint("TOPRIGHT", -16, -34)
+  window.heading:SetPoint("TOPLEFT", 16, -36)
+  window.heading:SetPoint("TOPRIGHT", -16, -36)
   window.heading:SetJustifyH("LEFT")
+  window.heading:SetTextColor(unpack(ns.Skin.color.accent))
 
   window.text = window:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
   window.text:SetPoint("TOPLEFT", window.heading, "BOTTOMLEFT", 0, -8)
@@ -623,15 +619,12 @@ local function makeWindow()
   window.text:SetJustifyH("LEFT")
   window.text:SetJustifyV("TOP")
 
-  window.go = CreateFrame("Button", nil, window, "UIPanelButtonTemplate")
-  window.go:SetSize(110, 22)
+  window.go = ns.Skin.Button(window, "", 110, 22)
   window.go:SetPoint("BOTTOMLEFT", 16, 14)
   window.go:SetScript("OnClick", onSend)
 
-  window.cancel = CreateFrame("Button", nil, window, "UIPanelButtonTemplate")
-  window.cancel:SetSize(90, 22)
+  window.cancel = ns.Skin.Button(window, "Close", 90, 22)
   window.cancel:SetPoint("BOTTOMRIGHT", -16, 14)
-  window.cancel:SetText("Close")
   window.cancel:SetScript("OnClick", function() endMail(nil) end)
 
   window:SetScript("OnHide", function() if mail then endMail(nil) end end)
@@ -737,6 +730,7 @@ function ns.BuildTransfer(parent, width)
     local h = f:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
     h:SetPoint("TOPLEFT", 10, top)
     h:SetText(text)
+    ns.Skin.Plain(h)
     return h
   end
   local function line(top, font)
@@ -747,9 +741,7 @@ function ns.BuildTransfer(parent, width)
     return l
   end
   local function button(text, w, onClick)
-    local b = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
-    b:SetSize(w, 22)
-    b:SetText(text)
+    local b = ns.Skin.Button(f, text, w, 22)
     b:SetScript("OnClick", onClick)
     return b
   end

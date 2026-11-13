@@ -29,6 +29,10 @@ local CAN = AH ~= nil and AH.SendSearchQuery ~= nil and AH.MakeItemKey ~= nil
   and AH.StartCommoditiesPurchase ~= nil and AH.PlaceBid ~= nil
 local TIMEOUT = 8       -- seconds to wait for the auction house before giving up
 local PAY_TIMEOUT = 20  -- seconds to wait for a purchase to be confirmed
+-- Seconds to wait, after the auction house reports an error while paying, for the
+-- purchase to be confirmed anyway: WoW Forever reports error 10 for purchases that go
+-- through.
+local ERROR_GRACE = 4
 local ADDON = ...
 local GetItemInfo = (C_Item and C_Item.GetItemInfo) or GetItemInfo
 local RED, GREY = "ffff4040", "ff808080"
@@ -360,7 +364,7 @@ end
 --- rest of the first search can't be bought any more ("item not found").
 local function payAuction(s, a)
   s.auction, s.note = a, nil
-  buy.state, buy.waited, buy.seen = "paying", 0, {}
+  buy.state, buy.waited, buy.seen, buy.error = "paying", 0, {}, nil
   -- The purchase first, the window after: nothing runs between the click and the
   -- protected call.
   C_AuctionHouse.PlaceBid(a.auctionID, a.each)
@@ -389,7 +393,7 @@ local function onBuy()
       show({ status = "Getting the price...", qty = s.qty })
     end
   elseif state == "confirm" then
-    buy.state, buy.waited, buy.holding, buy.seen = "paying", 0, false, {}
+    buy.state, buy.waited, buy.holding, buy.seen, buy.error = "paying", 0, false, {}, nil
     C_AuctionHouse.ConfirmCommoditiesPurchase(s.id, s.qty)
     if buy and buy.state == "paying" then
       show({ pay = s.total, qty = s.qty, notes = { ns.Color(GREY, "Buying...") } })
@@ -401,6 +405,15 @@ local function onBuy()
   elseif state == "next" then
     payAuction(s, s.nextAuction)
   end
+end
+
+--- An auction house error code as text: "AH error 10 (DatabaseError)."
+local function errorText(code)
+  local name
+  for k, v in pairs(Enum and Enum.AuctionHouseError or {}) do
+    if v == code then name = k end
+  end
+  return ("AH error %s%s."):format(tostring(code), name and (" (" .. name .. ")") or "")
 end
 
 --- Fail with a reason; the events seen while waiting go along, in grey, so a report from
@@ -516,7 +529,12 @@ events:SetScript("OnEvent", function(_, event, ...)
       s.note = ns.Color(RED, "Sold. Next cheapest:")
       return search()
     end
-    failed(("AH error %s."):format(tostring(code)))
+    if buy.state == "paying" then
+      -- It may still go through: wait a moment for the confirmation (see the driver).
+      if not buy.error then buy.error = { code = code, at = buy.waited } end
+      return
+    end
+    failed(errorText(code))
   elseif event == "COMMODITY_PRICE_UPDATED" and buy.state == "quote" then
     local unit, total = ...
     s.total, buy.state = total, "confirm"
@@ -530,7 +548,7 @@ events:SetScript("OnEvent", function(_, event, ...)
   elseif event == "COMMODITY_PURCHASE_SUCCEEDED" and buy.state == "paying" then
     bought(s.qty)
   elseif event == "COMMODITY_PURCHASE_FAILED" and buy.state == "paying" then
-    failed("Purchase failed.")
+    failed(buy.error and errorText(buy.error.code) or "Purchase failed.")
   elseif event == "AUCTION_HOUSE_PURCHASE_COMPLETED" and s.kind == "item" and s.auction
     and (buy.state == "paying" or (buy.state == "failed" and buy.late)) then
     -- A late answer still counts: the purchase went through.
@@ -583,6 +601,10 @@ driver:SetScript("OnUpdate", function(_, elapsed)
     end
   elseif buy.state == "quote" and buy.waited > TIMEOUT then
     failed("No price answer.")
+  elseif buy.state == "paying" and buy.error and buy.waited - buy.error.at > ERROR_GRACE then
+    -- An error and no confirmation since. A confirmation that still comes counts.
+    failed(errorText(buy.error.code))
+    buy.late = true
   elseif buy.state == "paying" and buy.waited > PAY_TIMEOUT then
     -- It may or may not have gone through: say so rather than buy twice. A late
     -- confirmation still counts.
@@ -603,8 +625,7 @@ local function makeDialog()
   -- A child of the game's auction house window, like the buy buttons of other auction
   -- addons.
   local parent = AuctionHouseFrame or UIParent
-  dialog = CreateFrame("Frame", "PuggerWaylaidCompanionBuy", parent, "BasicFrameTemplateWithInset")
-  dialog:SetSize(440, 230)
+  dialog = ns.Skin.Window("PuggerWaylaidCompanionBuy", parent, 440, 230, "Buy")
   dialog:SetPoint("CENTER", parent, "CENTER", 0, 0)
   dialog:SetToplevel(true)
   dialog:SetFrameStrata("DIALOG")
@@ -616,14 +637,11 @@ local function makeDialog()
   dialog:SetScript("OnDragStop", dialog.StopMovingOrSizing)
   dialog:Hide()
 
-  local title = dialog:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-  title:SetPoint("TOP", 0, -5)
-  title:SetText("Buy")
-
   dialog.heading = dialog:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-  dialog.heading:SetPoint("TOPLEFT", 16, -34)
-  dialog.heading:SetPoint("TOPRIGHT", -16, -34)
+  dialog.heading:SetPoint("TOPLEFT", 16, -36)
+  dialog.heading:SetPoint("TOPRIGHT", -16, -36)
   dialog.heading:SetJustifyH("LEFT")
+  dialog.heading:SetTextColor(unpack(ns.Skin.color.accent))
 
   -- "Paying 1 [gold] 20 [silver] for:"
   dialog.pay = dialog:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
@@ -659,6 +677,8 @@ local function makeDialog()
   dialog.item:SetPoint("LEFT", dialog, "TOPLEFT", 90, ROW)
   dialog.item.icon = dialog.item:CreateTexture(nil, "ARTWORK")
   dialog.item.icon:SetAllPoints()
+  dialog.item.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+  ns.Skin.Border(dialog.item, ns.Skin.color.edge, "OVERLAY")
   dialog.item:SetScript("OnEnter", function(self)
     if not self.id then return end
     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
@@ -667,8 +687,7 @@ local function makeDialog()
   end)
   dialog.item:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
-  dialog.max = CreateFrame("Button", nil, dialog, "UIPanelButtonTemplate")
-  dialog.max:SetSize(70, 22)
+  dialog.max = ns.Skin.Button(dialog, "", 70, 22)
   dialog.max:SetPoint("RIGHT", dialog, "TOPRIGHT", -16, ROW)
   dialog.max:SetScript("OnClick", function()
     local s = step()
@@ -689,21 +708,16 @@ local function makeDialog()
   dialog.notes:SetJustifyH("LEFT")
   dialog.notes:SetJustifyV("TOP")
 
-  dialog.buy = CreateFrame("Button", nil, dialog, "UIPanelButtonTemplate")
-  dialog.buy:SetSize(110, 22)
+  dialog.buy = ns.Skin.Button(dialog, "", 110, 22)
   dialog.buy:SetPoint("BOTTOMLEFT", 16, 14)
   dialog.buy:SetScript("OnClick", function() onBuy() end)
 
-  dialog.cancel = CreateFrame("Button", nil, dialog, "UIPanelButtonTemplate")
-  dialog.cancel:SetSize(90, 22)
+  dialog.cancel = ns.Skin.Button(dialog, "Cancel", 90, 22)
   dialog.cancel:SetPoint("BOTTOMRIGHT", -16, 14)
-  dialog.cancel:SetText("Cancel")
   dialog.cancel:SetScript("OnClick", function() finish(nil) end)
 
-  dialog.skip = CreateFrame("Button", nil, dialog, "UIPanelButtonTemplate")
-  dialog.skip:SetSize(90, 22)
+  dialog.skip = ns.Skin.Button(dialog, "Skip", 90, 22)
   dialog.skip:SetPoint("RIGHT", dialog.cancel, "LEFT", -6, 0)
-  dialog.skip:SetText("Skip")
   dialog.skip:SetScript("OnClick", function() if buy then nextStep(true) end end)
 
   -- Closing the dialog any way at all ends the purchase.

@@ -68,24 +68,37 @@ function ns.BuildOverview(parent, width)
 
   f.faction = f:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
   f.faction:SetPoint("TOPLEFT", 10, -4)
+  ns.Skin.Plain(f.faction)
   f.standing = f:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
   f.standing:SetPoint("TOPRIGHT", f, "TOPLEFT", 10 + barWidth, -7)
 
-  -- The bar: a dark trough, the fill, and the experience bar's dividers over it.
-  local trough = f:CreateTexture(nil, "BACKGROUND")
-  trough:SetColorTexture(0, 0, 0, 0.7)
-  trough:SetPoint("TOPLEFT", 8, -28)
-  trough:SetSize(barWidth + 4, 22)
+  local classic = ns.Skin.Classic()
   local bar = CreateFrame("StatusBar", nil, f)
-  bar:SetPoint("TOPLEFT", 10, -30)
-  bar:SetSize(barWidth, 18)
-  bar:SetStatusBarTexture("Interface/TargetingFrame/UI-StatusBar")
+  bar:SetStatusBarTexture(ns.Skin.Bar())
   bar:SetMinMaxValues(0, 1)
-  for i = 1, SEGMENTS - 1 do
-    local tick = bar:CreateTexture(nil, "OVERLAY")
-    tick:SetColorTexture(0, 0, 0, 0.45)
-    tick:SetSize(1, 18)
-    tick:SetPoint("LEFT", bar, "LEFT", math.floor(barWidth * i / SEGMENTS + 0.5), 0)
+  if classic then
+    -- A dark trough, the fill, and the experience bar's dividers over it.
+    local trough = f:CreateTexture(nil, "BACKGROUND")
+    trough:SetColorTexture(0, 0, 0, 0.7)
+    trough:SetPoint("TOPLEFT", 8, -28)
+    trough:SetSize(barWidth + 4, 22)
+    bar:SetPoint("TOPLEFT", 10, -30)
+    bar:SetSize(barWidth, 18)
+    for i = 1, SEGMENTS - 1 do
+      local tick = bar:CreateTexture(nil, "OVERLAY")
+      tick:SetColorTexture(0, 0, 0, 0.45)
+      tick:SetSize(1, 18)
+      tick:SetPoint("LEFT", bar, "LEFT", math.floor(barWidth * i / SEGMENTS + 0.5), 0)
+    end
+  else
+    -- A low, flat bar with rounded ends: the trough and the fill share one shape.
+    local HEIGHT = 14
+    bar:SetPoint("TOPLEFT", 10, -32)
+    bar:SetSize(barWidth, HEIGHT)
+    local trough = bar:CreateTexture(nil, "BACKGROUND")
+    trough:SetAllPoints()
+    trough:SetColorTexture(0, 0, 0, 0.6)
+    ns.Skin.Round(bar, bar, HEIGHT / 2)
   end
   bar.text = bar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
   bar.text:SetPoint("CENTER")
@@ -97,12 +110,21 @@ function ns.BuildOverview(parent, width)
   f.toExalted:SetPoint("TOPRIGHT", f, "TOPLEFT", 10 + barWidth, -54)
 
   local function heading(text, top)
-    local h = f:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    local h = f:CreateFontString(nil, "ARTWORK", classic and "GameFontNormal" or "GameFontHighlight")
     h:SetPoint("TOPLEFT", 10, top)
     h:SetText(text)
     return h
   end
+  --- A card behind a block of the page, from `top` down to `bottom` (modern style).
+  local function card(top, bottom)
+    if classic then return end
+    local back = ns.Skin.Fill(f, ns.Skin.color.card, "BACKGROUND", -1)
+    back:SetPoint("TOPLEFT", 0, top)
+    back:SetPoint("BOTTOMRIGHT", f, "TOPRIGHT", 0, bottom)
+    ns.Skin.Border(f, ns.Skin.color.line, "BORDER", back)
+  end
 
+  card(-80, -106 - (1 + #ns.WRIT_TIERS) * ROW - 24)
   heading("Turn-ins needed", -88)
   f.needed = makeGrid(f, -106, 1 + #ns.WRIT_TIERS)
   f.neededNote = f:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
@@ -110,6 +132,7 @@ function ns.BuildOverview(parent, width)
   f.neededNote:SetText("If all of one tier.")
 
   local todayTop = -106 - (1 + #ns.WRIT_TIERS) * ROW - 44
+  card(todayTop + 8, todayTop - 44 - (2 + #ns.WRIT_TIERS) * ROW - 6)
   heading("Today", todayTop)
   f.todayLine = f:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
   f.todayLine:SetPoint("TOPLEFT", 10, todayTop - 20)

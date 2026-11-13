@@ -290,7 +290,7 @@ end
 --- What a writ costs to do from nothing: { writ, each, material (each x count), total
 --- (of the parts with a price), partial (a part has none), age (days since the oldest
 --- of its prices was seen, nil when unknown), old (that is OLD_PRICE_DAYS or more),
---- per100 (total for each 100 reputation; nil when no part has a price) }.
+--- perRep (total for each point of reputation; nil when no part has a price) }.
 function ns.WritCost(writ)
   local paper, paperAge = ns.PriceInfo(writ.writItem)
   local each, eachAge = ns.PriceInfo(writ.item)
@@ -304,25 +304,56 @@ function ns.WritCost(writ)
     writ = paper, each = each, material = material,
     total = total, partial = not (paper and material),
     age = age, old = age ~= nil and age >= ns.OLD_PRICE_DAYS,
-    per100 = (paper or material) and total * 100 / ns.WRIT_REP[writ.tier] or nil,
+    perRep = (paper or material) and total / ns.WRIT_REP[writ.tier] or nil,
   }
 end
 
---- What a crate costs to fill from nothing, with the cheapest of its bundles that has a
---- price: { crate, bundle (nil when none has a price), material, total, partial }.
+--- What a crate costs to fill from nothing with each of its bundles, and with the
+--- cheapest of them that has a price.
+---
+--- { crate (the empty crate's price), favor (the least Merchant's Favor its tier pays,
+---   nil when unknown), favorEstimated (that is an estimate, see CrateFavor),
+---   bundles = { [bundle] = part }, cheapest (the cheapest bundle,
+---   nil when none has a price), and the cheapest's part fields }
+---
+--- Each part: { each, material (each x count), total (crate and material, of what has a
+--- price), partial (the crate or the material has no price), age (days since the older
+--- of the two prices was seen), old (that is OLD_PRICE_DAYS or more), perFavor (total
+--- for each Merchant's Favor; nil without a price or a favor amount) }.
 function ns.CrateCost(crate)
-  local box = ns.Price(crate.item)
-  local bundle, material
+  local box, boxAge = ns.PriceInfo(crate.item)
+  local amounts, estimated = ns.CrateFavor(crate.tier)
+  local favor = amounts[1]
+  local cost = { crate = box, favor = favor, favorEstimated = estimated, bundles = {} }
   for _, b in ipairs(crate.bundles) do
-    local each = ns.Price(b.item)
-    if each and (not material or each * b.count < material) then
-      bundle, material = b, each * b.count
+    local each, eachAge = ns.PriceInfo(b.item)
+    local material = each and each * b.count
+    local age
+    for _, days in ipairs({ box and boxAge or false, each and eachAge or false }) do
+      if days and (not age or days > age) then age = days end
+    end
+    local total = (box or 0) + (material or 0)
+    local part = {
+      each = each, material = material, total = total, partial = not (box and material),
+      age = age, old = age ~= nil and age >= ns.OLD_PRICE_DAYS,
+      perFavor = favor and (box or material) and total / favor or nil,
+    }
+    cost.bundles[b] = part
+    if material and (not cost.cheapest or material < cost.bundles[cost.cheapest].material) then
+      cost.cheapest = b
     end
   end
-  return {
-    crate = box, bundle = bundle, material = material,
-    total = (box or 0) + (material or 0), partial = not (box and material),
-  }
+  local best = cost.cheapest and cost.bundles[cost.cheapest]
+  if best then
+    for key, value in pairs(best) do cost[key] = value end
+  else
+    -- No material has a price: the crate alone, if that has one.
+    cost.total, cost.partial = box or 0, true
+    cost.age = box and boxAge or nil
+    cost.old = cost.age ~= nil and cost.age >= ns.OLD_PRICE_DAYS
+    cost.perFavor = favor and box and box / favor or nil
+  end
+  return cost
 end
 
 --- True once a writ's quest has been handed in today. The writs are daily quests, so
@@ -366,12 +397,19 @@ for quest, id in pairs(ns.RECORDED_WRITS or {}) do
   if writ and not writ.npc and ns.WRIT_NPCS[id] then writ.npc = id end
 end
 
+--- Whether a writ the data limits to one side has been had on the other: by this account,
+--- by a player who shared it, or as recorded in Data/Recorded.lua.
+function ns.AnySide(quest)
+  return (ns.db ~= nil and ns.db.anySide[quest] == true)
+    or (ns.RECORDED_ANYSIDE ~= nil and ns.RECORDED_ANYSIDE[quest] == true)
+end
+
 --- Whether the player's side can do a writ. A few are limited to one side, going by data
---- that is not always right: a writ this account has had on the other side counts too.
+--- that is not always right: a writ had on the other side counts too (ns.AnySide).
 function ns.ForPlayer(writ)
   local side = ns.Side()
   if writ.side == nil or side == nil or writ.side == side then return true end
-  return ns.db ~= nil and ns.db.anySide[writ.quest] == true
+  return ns.AnySide(writ.quest)
 end
 
 --- Where a writ is handed in: { id, name, map, x, y, zone }, from the shipped data or
@@ -474,8 +512,8 @@ for _, row in ipairs(ns.CRATES) do
 end
 
 --- The Merchant's Favor a filled crate of a tier pays, as the amounts known for it,
---- smallest first: from the shipped data and from what this account has seen paid.
---- Empty when nobody knows yet.
+--- smallest first: from the shipped data and from what this account has seen paid. While
+--- nothing is known, the estimate for the tier and true (empty when there is none).
 function ns.CrateFavor(tier)
   local seen, amounts = {}, {}
   local function add(n)
@@ -497,8 +535,13 @@ function ns.CrateFavor(tier)
       end
     end
   end
+  if #amounts == 0 and ns.CRATE_FAVOR_ESTIMATE[tier] then
+    for _, n in ipairs(ns.CRATE_FAVOR_ESTIMATE[tier]) do add(n) end
+    table.sort(amounts)
+    return amounts, true
+  end
   table.sort(amounts)
-  return amounts
+  return amounts, false
 end
 
 --- The player's crate turn-in: { id, name, map, x, y, zone, faction }, nil for no side.
@@ -595,7 +638,13 @@ end
 -- ---------------------------------------------------------------------------
 
 -- ownerNames: 2 shows characters by first name and surname ("Show both names"), 1 by first name.
-local DEFAULTS = { page = "overview", writSort = "level", crateSort = "level", pins = true, ownerNames = 1 }
+-- writCost and crateCost: "per" shows a cost per repScale reputation or per favorScale
+-- Merchant's Favor, "total" what a writ or crate costs in all. itemColor: "tier" colours
+-- writ and crate names by tier, "rarity" in the game's colour for the item. theme: "modern"
+-- draws the windows flat and dark, "classic" with the game's own frames (Theme.lua).
+local DEFAULTS = { page = "overview", writSort = "level", crateSort = "level", pins = true, ownerNames = 1,
+  writCost = "per", crateCost = "per", repScale = 100, favorScale = 1, itemColor = "tier",
+  theme = "modern" }
 
 local listeners = {}
 --- Call fn whenever what the pages show may have changed (bags, quests, item names).
@@ -654,6 +703,8 @@ events:SetScript("OnEvent", function(_, event, arg1)
     db.prices = db.prices or {}
     -- Folded groups on the list pages, by "page:sort:group".
     db.collapsed = db.collapsed or {}
+    -- The order a page's columns were dragged into, by page: { [page] = { 3, 1, 2, ... } }.
+    db.columns = db.columns or {}
     -- Each character's surname, by "Name-Realm": WoW Forever mail goes to "Name Surname".
     db.surnames = db.surnames or {}
     ns.db = db
@@ -701,6 +752,12 @@ SlashCmdList.PUGGERWAYLAID = function(msg)
     ns.Changed()
   elseif msg == "scan" then
     if ns.ToggleScan then ns.ToggleScan() end
+  elseif msg == "export" then
+    if ns.ShowExport then ns.ShowExport() end
+  elseif msg == "import" then
+    if ns.ShowImport then ns.ShowImport() end
+  elseif msg == "shop" then
+    if ns.ShopReport then ns.ShopReport() end
   elseif msg == "where" then
     ns.Where()
   elseif ns.Toggle then
