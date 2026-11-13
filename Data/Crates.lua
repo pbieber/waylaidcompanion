@@ -20,6 +20,8 @@ ns.CRATE_SKILL = {
   Curiosities = "Enchanting",
   Parts = "Engineering",
 }
+-- The kinds filled with something crafted, not gathered or disenchanted.
+ns.CRATE_CRAFTED = { Ingots = true, Fabrics = true, Parts = true }
 ns.CRATE_KINDS = { "Herbs", "Ore", "Ingots", "Textiles", "Fabrics", "Curiosities", "Parts" }
 
 -- { crate item, tier (1 Apprentice, 2 Journeyman, 3 Expert, 4 Artisan), kind, name,

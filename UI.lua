@@ -4,6 +4,7 @@ The window: a menu down the left, a page on the right.
   Overview           - rep and what is left today (Overview.lua)
   Craftsman's Writs  - every writ, by tier, profession or cost
   Waylaid Crates     - every crate and its material, by tier, profession or cost
+  Fastcraft          - the crates in the bags and what in the bags fills them
   Turn-ins           - where writs and crates go; the same places Map.lua marks
   Rewards            - the quartermaster's items (Rewards.lua)
   Transfer           - mail, bank and buying (Transfer.lua)
@@ -23,7 +24,7 @@ local WIDTH, HEIGHT, MENU = 920, 640, 170
 local ROW, CELLS, HEAD = 22, 7, 20
 local GREY, GOLD, GREEN, ORANGE = "ff808080", "ffffd100", "ff40d040", "ffff8040"
 
-local window, list, sortBar, note, scanBar
+local window, list, sortBar, note, scanBar, fillBar
 local panels = {}  -- the pages that aren't lists: overview, transfer
 local refresh
 local pages = {}
@@ -950,10 +951,15 @@ pages.crates = {
           local color = have >= bundle.count and GREEN or (have > 0 and GOLD or GREY)
           local part = cost.bundles[bundle]
           local cheapest = bundle == cost.cheapest
+          -- A click opens the window that fills crates with it and, for a crafted
+          -- material, queues its crafting (Craft.lua).
+          local crafted = ns.CRATE_CRAFTED[crate.kind] and ns.CanCraft()
           entries[#entries + 1] = {
             icon = bundleIcon,
             item = bundle.item,
             indent = 22,
+            tip = crafted and "Click: fill crates with it, or craft it." or "Click: fill crates with it.",
+            click = function() ns.Craft(crate, bundle) end,
             lines = function()
               local lines = { { " " } }
               local now = ns.CrateCost(crate)
@@ -984,6 +990,77 @@ pages.crates = {
       "Crate", sort == "profession" and "Tier" or "Profession", "Favor",
       { crateCostHeading(), crateCostTip() },
       { "Owned", ownedTip("Crates") },
+    }
+  end,
+}
+
+-- Crate or material, in bags, crates it fills.
+local FAST_COLUMNS = { 0, 400, 520, 710 }
+
+--- How many crates the bags can fill now, over every kind.
+local function fastFills()
+  local total = 0
+  for _, p in ipairs(ns.FillPlan(ns.Count)) do total = total + p.fills end
+  return total
+end
+
+pages.fastcraft = {
+  title = "Fastcraft",
+  footer = "fill",
+  build = function()
+    -- What the Craft button will fill, by crate and by material.
+    local byCrate, byBundle = {}, {}
+    for _, p in ipairs(ns.FillPlan(ns.Count)) do
+      byCrate[p.crate] = (byCrate[p.crate] or 0) + p.fills
+      byBundle[p.bundle] = p.fills
+    end
+    local entries = {}
+    for _, crate in ipairs(ns.crates) do
+      local held = ns.Count(crate.item)
+      if held > 0 then
+        local _, icon = ns.Item(crate.item)
+        local fills = byCrate[crate] or 0
+        entries[#entries + 1] = {
+          icon = icon,
+          item = crate.item,
+          cells = {
+            itemColored(crate.item, ns.CRATE_COLOR[crate.tier], "Waylaid Crate: " .. crate.name),
+            tostring(held),
+            fills > 0 and ns.Color(fills >= held and GREEN or GOLD, ("%d of %d"):format(fills, held))
+              or ns.Color(GREY, "no material in bags"),
+          },
+        }
+        for _, bundle in ipairs(crate.bundles) do
+          local have = ns.Count(bundle.item)
+          if have > 0 then
+            local name, bundleIcon = ns.Item(bundle.item, bundle.name)
+            local could = math.floor(have / bundle.count)
+            local n = byBundle[bundle]
+            local text
+            if n then
+              text = ns.Color(GREEN, tostring(n))
+            elseif could > 0 then
+              text = ns.Color(GREY, "not needed")  -- another material fills them all
+            else
+              text = ns.Color(GREY, ("needs %d"):format(bundle.count))
+            end
+            entries[#entries + 1] = {
+              icon = bundleIcon,
+              item = bundle.item,
+              indent = 22,
+              tip = "Click: fill crates with this one only.",
+              click = function() ns.Craft(crate, bundle) end,
+              cells = { itemColored(bundle.item, nil, ("%d x %s"):format(bundle.count, name)), tostring(have), text },
+            }
+          end
+        end
+      end
+    end
+    if #entries == 0 then
+      entries[1] = { header = "No unfilled crate in the bags." }
+    end
+    return entries, FAST_COLUMNS, nil, {
+      "Crate", "In bags", { "Fills", "Crates the bags can fill now, and with which material." },
     }
   end,
 }
@@ -1251,8 +1328,9 @@ pages.transfer = { title = "Transfer", panel = "transfer" }
 pages.options = { title = "Options", panel = "options" }
 
 -- The pages down the menu; Options sits apart at its foot.
-local MENU_ORDER = { "overview", "writs", "crates", "turnins", "rewards", "transfer", "options" }
+local MENU_ORDER = { "overview", "writs", "crates", "fastcraft", "turnins", "rewards", "transfer", "options" }
 local MENU_ICON = {
+  fastcraft = "Interface/Icons/INV_Box_01",
   overview = "Interface/Icons/INV_Misc_Book_09",
   writs = "Interface/Icons/INV_Scroll_03",
   crates = "Interface/Icons/INV_Crate_01",
@@ -1351,10 +1429,22 @@ function refresh()
     -- The scan button scans the items this page prices.
     scanBar.scope = key
     note:Hide()
+    fillBar:Hide()
     scanBar:Show()
     updateScanBar()
+  elseif page.footer == "fill" then
+    -- The Craft button fills every crate the bags can, one kind after the other.
+    local fills = fastFills()
+    scanBar:Hide()
+    note:Hide()
+    fillBar:Show()
+    fillBar.button:SetEnabled(fills > 0)
+    fillBar.text:SetText(fills > 0
+      and ("The bags can fill %d crate%s. One click per crate."):format(fills, fills == 1 and "" or "s")
+      or "Nothing to fill: no crate in the bags with its material.")
   else
     scanBar:Hide()
+    fillBar:Hide()
     note:Show()
   end
 
@@ -1531,6 +1621,20 @@ local function build()
   scanBar.bar.text:SetPoint("RIGHT", -6, 0)
   scanBar.bar.text:SetJustifyH("LEFT")
   scanBar.bar.text:SetWordWrap(false)
+
+  -- The Fastcraft page's foot: the button that fills every crate the bags can.
+  fillBar = CreateFrame("Frame", nil, window)
+  fillBar:SetPoint("BOTTOMLEFT", MENU + 8, 12)
+  fillBar:SetPoint("BOTTOMRIGHT", -14, 12)
+  fillBar:SetHeight(26)
+  fillBar:Hide()
+  fillBar.button = Skin.Button(fillBar, "Craft", 150, 22)
+  fillBar.button:SetPoint("LEFT", 0, 0)
+  fillBar.button:SetScript("OnClick", function() ns.FillAll() end)
+  fillBar.text = fillBar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  fillBar.text:SetPoint("LEFT", fillBar.button, "RIGHT", 10, 0)
+  fillBar.text:SetPoint("RIGHT", fillBar, "RIGHT", 0, 0)
+  fillBar.text:SetJustifyH("LEFT")
 
   -- The pages that aren't lists.
   panels.overview = ns.BuildOverview(window, WIDTH - MENU - 22)

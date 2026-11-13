@@ -17,6 +17,7 @@ Theme.lua
 Learn.lua
 Scan.lua
 Buy.lua
+Craft.lua
 Transfer.lua
 Rewards.lua
 Share.lua

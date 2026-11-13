@@ -9,6 +9,7 @@ Open the window with `/pwc`, the minimap button or the addon compartment.
 - **Overview**: your standing, the turn-ins to the next standing and to Exalted, and what is open today.
 - **Craftsman's Writs**: every writ for your side, by tier, profession or cost: material, rep, cost (per 100 rep by default), owned, zone of the turn-in, today. Click a row: map (or, at the auction house, buy).
 - **Waylaid Crates**: every crate, by tier, profession or cost: the Merchant's Favor it pays, its cost with its cheapest material (per favor by default), owned. Each material under a crate shows the crate's cost filled with that one, and the cheapest is ticked. Crates of gathered goods (herbs, ore, textiles, curiosities) are white, crates of crafted goods (ingots, fabrics, parts) green, and a green crate pays twice the favor of a white one of its tier. A turn-in also pays half its favor in silver (5 favor, 2s 50c); that comes off the cost unless you untick **Count the turn-in's silver** under Options.
+- **Fastcraft**: the crates in your bags, the materials in your bags that fill them, and how many crates that fills. **Craft** fills them all, one kind after the other (below).
 - **Turn-ins**: every turn-in, by continent. Also marked on the world map.
 - **Rewards**: what your faction's quartermasters sell, one list per profession, each with its own quartermaster, by standing, with its cost and whether you can buy it. Learned the first time you open each quartermaster's shop.
 - **Transfer**: mail, bank and buying for writs (below).
@@ -50,6 +51,19 @@ Material sold in bulk: **Buy** gets the exact price, **Confirm** pays. **Skip** 
 
 Prices more than 3 minutes old are searched again first: when an item was last scanned longer ago, and when you click **Buy** on an offer that has sat that long (it then shows the new price, and what it was). The lowest price each search finds replaces the item's price on the writs and crates pages.
 
+## Filling crates
+
+On the crates page, click a material under a crate. The window says how many of the crates in your bags it fills. **Fill a crate** uses a crate and picks the material for you, which starts the cast; click again after each cast, one click per crate. Not in combat.
+
+To fill every crate in your bags, open **Fastcraft** and click **Craft**. The same window opens on the first crate your bags can fill; when that kind is done it moves on to the next by itself, until nothing is left to fill. It is still one click per crate. Where a crate's first material runs short, the next one in your bags fills the rest.
+
+For a crafted material (a bar, a bolt, a cured hide, an engineering part) the window also lists the recipes that make enough of it for the crates in your bags, what it is made of first; set **Craft for crates** to craft for more or fewer. Nothing is crafted without a click.
+
+1. Open the profession. The addon reads its recipes while its window is open, and keeps them until you log out.
+2. Click **Craft**. One click crafts one recipe as often as your bags allow; the queue moves on as the bags fill.
+
+A recipe of another profession (bars for engineering parts) shows `open` and its profession: open that one to craft it. `Missing` is what the bags lack and no recipe you know makes.
+
 ## Transfer
 
 A *set* is one writ and its material.
@@ -70,7 +84,7 @@ The Owned column counts the writs on every character of the account: bags, bank 
 | Command | What it does |
 | --- | --- |
 | `/pwc` or `/waylaid` | Show or hide the window |
-| `/pwc writs`, `/pwc crates`, `/pwc turnins`, `/pwc rewards`, `/pwc transfer`, `/pwc options` | Open the window on that page |
+| `/pwc writs`, `/pwc crates`, `/pwc fastcraft`, `/pwc turnins`, `/pwc rewards`, `/pwc transfer`, `/pwc options` | Open the window on that page |
 | `/pwc map` | Show or hide the world map markers |
 | `/pwc minimap` | Show or hide the minimap button |
 | `/pwc scan` | Start or stop the auction house scan of writs and crates (`/pwc scan writs`, `/pwc scan crates`: one) |
