@@ -5,6 +5,7 @@ The Options page: how the writs and crates pages show cost, and how characters a
   - Waylaid Crates: cost per Merchant's Favor or in all; per 1, 10, 100 or 1000 favor.
   - Items: names coloured by writ or crate tier, or by the item's rarity as in game.
   - Characters: "Show both names" (first name and surname) in the Owned columns.
+  - Window: the modern or the classic style (after a reload), and the columns' order.
 
 ns.BuildOptions makes the frame; UI.lua places it and calls its Refresh.
 ]]
@@ -33,7 +34,7 @@ function ns.BuildOptions(parent, width)
     local h = f:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
     h:SetPoint("TOPLEFT", 10, top)
     h:SetText(text)
-    h:SetTextColor(1, 1, 1)
+    ns.Skin.Plain(h)
   end
   local function note(text, top)
     local n = f:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
@@ -43,8 +44,8 @@ function ns.BuildOptions(parent, width)
     n:SetText(text)
   end
 
-  --- A row of tabs, one per choice, for a saved setting; the chosen one is underlined,
-  --- the way the sort tabs show theirs. `choices` are { value, text },
+  --- A row of boxes, one per choice, for a saved setting; the chosen one is filled in
+  --- the accent colour (classic: pressed in). `choices` are { value, text },
   --- text a string or a function giving one.
   local function choice(label, top, key, choices)
     local text = f:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
@@ -52,7 +53,7 @@ function ns.BuildOptions(parent, width)
     text:SetText(label)
     local buttons = {}
     for i, c in ipairs(choices) do
-      local b = ns.Skin.Tab(f, BUTTON_W, 22)
+      local b = ns.Skin.Choice(f, BUTTON_W, 22)
       b:SetPoint("TOPLEFT", 10 + LABEL_W + (i - 1) * (BUTTON_W + 4), top)
       b:SetScript("OnClick", function()
         ns.db[key] = c[1]
@@ -120,6 +121,36 @@ function ns.BuildOptions(parent, width)
   controls[#controls + 1] = { Refresh = function() names:SetChecked(ns.db.ownerNames == 2) end }
   note("The Owned columns name another character by first name, or ticked, by first name and "
     .. "surname. Also /pwc names.", top - 28 - ROW)
+
+  top = top - 28 - ROW - 46
+  heading("Window", top)
+  choice("Style", top - 28, "theme", { { "modern", "Modern" }, { "classic", "Classic" } })
+  -- A style is drawn when the windows are built, so a change waits for a reload.
+  local reload = ns.Skin.Button(f, "Reload UI", BUTTON_W, 22)
+  reload:SetPoint("TOPLEFT", 10 + LABEL_W + 2 * (BUTTON_W + 4) + 12, top - 28)
+  reload:SetScript("OnClick", function() if ReloadUI then ReloadUI() end end)
+  local reloadNote = f:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+  reloadNote:SetPoint("LEFT", reload, "RIGHT", 8, 0)
+  reloadNote:SetText("Reload to apply the style.")
+  controls[#controls + 1] = {
+    Refresh = function()
+      local changed = (ns.db.theme == "classic") ~= ns.Skin.Classic()
+      reload:SetShown(changed)
+      reloadNote:SetShown(changed)
+    end,
+  }
+
+  local columns = f:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+  columns:SetPoint("TOPLEFT", 10, top - 28 - ROW - 4)
+  columns:SetText("Columns")
+  local reset = ns.Skin.Button(f, "Reset order", BUTTON_W, 22)
+  reset:SetPoint("TOPLEFT", 10 + LABEL_W, top - 28 - ROW)
+  reset:SetScript("OnClick", function()
+    ns.db.columns = {}
+    ns.Changed()
+  end)
+  note("On any list, drag a column's heading onto another to move the column there. "
+    .. "Each page remembers its own order.", top - 28 - 2 * ROW)
 
   function f:Refresh()
     for _, c in ipairs(controls) do c.Refresh() end

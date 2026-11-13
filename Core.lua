@@ -640,9 +640,11 @@ end
 -- ownerNames: 2 shows characters by first name and surname ("Show both names"), 1 by first name.
 -- writCost and crateCost: "per" shows a cost per repScale reputation or per favorScale
 -- Merchant's Favor, "total" what a writ or crate costs in all. itemColor: "tier" colours
--- writ and crate names by tier, "rarity" in the game's colour for the item.
+-- writ and crate names by tier, "rarity" in the game's colour for the item. theme: "modern"
+-- draws the windows flat and dark, "classic" with the game's own frames (Theme.lua).
 local DEFAULTS = { page = "overview", writSort = "level", crateSort = "level", pins = true, ownerNames = 1,
-  writCost = "per", crateCost = "per", repScale = 100, favorScale = 1, itemColor = "tier" }
+  writCost = "per", crateCost = "per", repScale = 100, favorScale = 1, itemColor = "tier",
+  theme = "modern" }
 
 local listeners = {}
 --- Call fn whenever what the pages show may have changed (bags, quests, item names).
@@ -701,6 +703,8 @@ events:SetScript("OnEvent", function(_, event, arg1)
     db.prices = db.prices or {}
     -- Folded groups on the list pages, by "page:sort:group".
     db.collapsed = db.collapsed or {}
+    -- The order a page's columns were dragged into, by page: { [page] = { 3, 1, 2, ... } }.
+    db.columns = db.columns or {}
     -- Each character's surname, by "Name-Realm": WoW Forever mail goes to "Name Surname".
     db.surnames = db.surnames or {}
     ns.db = db

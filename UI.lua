@@ -19,7 +19,7 @@ if not CreateFrame then return end
 local GetItemInfo = (C_Item and C_Item.GetItemInfo) or GetItemInfo
 
 local Skin = ns.Skin
-local WIDTH, HEIGHT, MENU = 920, 560, 170
+local WIDTH, HEIGHT, MENU = 920, 640, 170
 local ROW, CELLS, HEAD = 22, 7, 20
 local GREY, GOLD, GREEN, ORANGE = "ff808080", "ffffd100", "ff40d040", "ffff8040"
 
@@ -62,6 +62,10 @@ local function showTooltip(row)
   end
 end
 
+-- A folding header's mark in the classic style.
+local FOLDED = "|TInterface/Buttons/UI-PlusButton-Up:14:14|t "
+local UNFOLDED = "|TInterface/Buttons/UI-MinusButton-Up:14:14|t "
+
 local function makeRow(parent)
   local row = CreateFrame("Button", nil, parent)
   row:SetHeight(ROW)
@@ -69,15 +73,16 @@ local function makeRow(parent)
   row.stripe:SetAllPoints()
   row.icon = row:CreateTexture(nil, "ARTWORK")
   row.icon:SetSize(ROW - 4, ROW - 4)
-  row.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)  -- without the icon's own border
-  -- A group header's colour bar on its left, and its fold arrow.
+  -- A group header's colour bar on its left, and its fold arrow (modern style).
   row.bar = row:CreateTexture(nil, "BORDER")
   row.bar:SetPoint("TOPLEFT")
   row.bar:SetPoint("BOTTOMLEFT")
   row.bar:SetWidth(3)
+  row.bar:Hide()
   row.arrow = row:CreateTexture(nil, "ARTWORK")
   row.arrow:SetTexture("Interface/ChatFrame/ChatFrameExpandArrow")
   row.arrow:SetSize(12, 12)
+  row.arrow:Hide()
   row.cells = {}
   for i = 1, CELLS do
     local text = row:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
@@ -89,15 +94,39 @@ local function makeRow(parent)
   row.right = row:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
   row.right:SetJustifyH("RIGHT")
   row.right:SetWordWrap(false)
-  row.right:SetTextColor(Skin.color.dim[1], Skin.color.dim[2], Skin.color.dim[3])
-  local hover = Skin.Fill(row, Skin.color.hover, "HIGHLIGHT")
-  hover:SetAllPoints()
+  if Skin.Classic() then
+    row:SetHighlightTexture("Interface/QuestFrame/UI-QuestTitleHighlight", "ADD")
+  else
+    row.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)  -- without the icon's own border
+    row.right:SetTextColor(Skin.color.dim[1], Skin.color.dim[2], Skin.color.dim[3])
+    local hover = Skin.Fill(row, Skin.color.hover, "HIGHLIGHT")
+    hover:SetAllPoints()
+  end
   row:SetScript("OnEnter", showTooltip)
   row:SetScript("OnLeave", function() GameTooltip:Hide() end)
   row:SetScript("OnClick", function(self)
     if self.entry and self.entry.click then self.entry.click() end
   end)
   return row
+end
+
+--- The order a page's columns are shown in: the one the player dragged them into, else
+--- the page's own, else as the page lists them. A list of column numbers, 1 to n.
+local function columnOrder(key, n, default)
+  local saved = key and ns.db.columns and ns.db.columns[key]
+  for _, order in ipairs({ saved or false, default or false }) do
+    if order and #order == n then
+      local seen, whole = {}, true
+      for _, c in ipairs(order) do
+        if type(c) ~= "number" or c < 1 or c > n or c % 1 ~= 0 or seen[c] then whole = false end
+        seen[c] = true
+      end
+      if whole then return order end
+    end
+  end
+  local order = {}
+  for c = 1, n do order[c] = c end
+  return order
 end
 
 --- Show a creature's face on a header row, from its NPC id: a 3D model zoomed to the
@@ -136,22 +165,51 @@ local function makeList(parent)
   l.rows = {}
 
   -- The column headings, a row of their own above the list that does not scroll. A
-  -- heading with a tip explains itself on hover.
+  -- heading with a tip explains itself on hover; dragging one onto another moves its
+  -- column there, which the page then remembers.
+  local classic = Skin.Classic()
   l.head = CreateFrame("Frame", nil, parent)
   l.head:SetHeight(HEAD)
   local shade = l.head:CreateTexture(nil, "BACKGROUND")
   shade:SetAllPoints()
-  shade:SetColorTexture(0, 0, 0, 0.3)
-  local under = Skin.Fill(l.head, Skin.color.line, "BORDER")
-  under:SetPoint("BOTTOMLEFT")
-  under:SetPoint("BOTTOMRIGHT")
-  under:SetHeight(1)
+  shade:SetColorTexture(0, 0, 0, classic and 0.4 or 0.3)
+  if not classic then
+    local under = Skin.Fill(l.head, Skin.color.line, "BORDER")
+    under:SetPoint("BOTTOMLEFT")
+    under:SetPoint("BOTTOMRIGHT")
+    under:SetHeight(1)
+  end
+  -- Where a dragged column would land.
+  l.marker = Skin.Fill(l.head, Skin.color.accent, "OVERLAY")
+  l.marker:SetSize(2, HEAD)
+  l.marker:Hide()
+
+  --- Where in the order column `c` is.
+  local function place(c)
+    for pos, other in ipairs(l.order or {}) do
+      if other == c then return pos end
+    end
+  end
+  --- The place in the order of the column the cursor is over, by its left-to-right
+  --- position alone.
+  local function placeUnderCursor()
+    local x = GetCursorPosition() / l.head:GetEffectiveScale() - (l.head:GetLeft() or 0)
+    local found
+    for pos, c in ipairs(l.order or {}) do
+      found = pos
+      if x < l.lefts[c] + l.widths[c] then break end
+    end
+    return found
+  end
+
   l.head.cells = {}
   for i = 1, CELLS do
     local cell = CreateFrame("Button", nil, l.head)
     cell:SetHeight(HEAD)
-    cell.text = cell:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-    cell.text:SetTextColor(Skin.color.dim[1], Skin.color.dim[2], Skin.color.dim[3])
+    cell.text = cell:CreateFontString(nil, "ARTWORK", classic and "GameFontNormalSmall" or "GameFontHighlightSmall")
+    if not classic then
+      cell.text:SetTextColor(Skin.color.dim[1], Skin.color.dim[2], Skin.color.dim[3])
+    end
     cell.text:SetAllPoints()
     cell.text:SetJustifyH("LEFT")
     cell.text:SetWordWrap(false)
@@ -163,6 +221,38 @@ local function makeList(parent)
       GameTooltip:Show()
     end)
     cell:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    cell:RegisterForDrag("LeftButton")
+    cell:SetScript("OnDragStart", function(self)
+      if not l.key then return end
+      GameTooltip:Hide()
+      self.text:SetAlpha(0.4)
+      l.head:SetScript("OnUpdate", function()
+        local from, to = place(i), placeUnderCursor()
+        if not from or not to or from == to then
+          l.marker:Hide()
+          return
+        end
+        -- Moved right it lands after the column under the cursor, moved left before it.
+        local over = l.order[to]
+        local x = l.lefts[over] + (to > from and l.widths[over] - 4 or -3)
+        l.marker:ClearAllPoints()
+        l.marker:SetPoint("LEFT", l.head, "LEFT", math.max(0, x), 0)
+        l.marker:Show()
+      end)
+    end)
+    cell:SetScript("OnDragStop", function(self)
+      l.head:SetScript("OnUpdate", nil)
+      l.marker:Hide()
+      self.text:SetAlpha(1)
+      local from, to = place(i), placeUnderCursor()
+      if not l.key or not from or not to or from == to then return end
+      local order = {}
+      for pos, c in ipairs(l.order) do order[pos] = c end
+      table.remove(order, from)
+      table.insert(order, to, i)
+      ns.db.columns[l.key] = order
+      refresh()
+    end)
     l.head.cells[i] = cell
   end
 
@@ -183,20 +273,31 @@ local function makeList(parent)
   l.scroll:HookScript("OnVerticalScroll", function() l:Portraits() end)
   l.scroll:HookScript("OnSizeChanged", function() l:Portraits() end)
 
-  --- Draw entries. `columns` is the left edge of each cell, the last entry the width;
-  --- `headings` names the columns, each a text or { text, tip }. A header entry may
-  --- have `right`, a text for its right-hand side, and `portrait`, an NPC id.
-  function l:Set(entries, columns, headings)
+  --- Draw entries. `columns` is the left edge of each cell as the page lists them, the
+  --- last entry the width; `headings` names the columns, each a text or { text, tip }.
+  --- `key` names the page, for the order its columns were dragged into, and `default`
+  --- is the page's own order. The first column carries the row's icon wherever it is.
+  --- A header entry may have `right`, a text for its right-hand side, and `portrait`,
+  --- an NPC id.
+  function l:Set(entries, columns, headings, key, default)
     local width = columns[#columns]
+    local order = columnOrder(key, #columns - 1, default)
+    local lefts, widths, x = {}, {}, 0
+    for _, c in ipairs(order) do
+      widths[c] = columns[c + 1] - columns[c]
+      lefts[c] = x
+      x = x + widths[c]
+    end
+    self.key, self.order, self.lefts, self.widths = key, order, lefts, widths
     for c, cell in ipairs(self.head.cells) do
       local heading = headings and headings[c]
       if heading and c < #columns then
         local label, tip = heading, nil
         if type(heading) == "table" then label, tip = heading[1], heading[2] end
-        local left = columns[c] + (c == 1 and ROW + 4 or 0)
+        local left = lefts[c] + (c == 1 and ROW + 4 or 0)
         cell:ClearAllPoints()
         cell:SetPoint("LEFT", left, 0)
-        cell:SetWidth(columns[c + 1] - left - 6)
+        cell:SetWidth(lefts[c] + widths[c] - left - 6)
         cell.text:SetText(tip and (label .. " |cff808080(?)|r") or label)
         cell.label, cell.tip = label, tip
         cell:Show()
@@ -217,29 +318,38 @@ local function makeList(parent)
       row:SetPoint("TOPLEFT", 0, -(i - 1) * ROW)
       local indent = entry.indent or 0
       if entry.header then
-        -- A dark band with a bar in the group's colour (the accent without one), a fold
-        -- arrow when it folds, and the quiet part of the title in grey.
-        row.stripe:SetColorTexture(unpack(Skin.color.band))
-        local r, g, b = Skin.RGB(entry.color or Skin.ACCENT_HEX)
-        row.bar:SetColorTexture(r, g, b, 1)
-        row.bar:Show()
-        local left = 12 + indent
-        if entry.folded ~= nil then
-          row.arrow:ClearAllPoints()
-          row.arrow:SetPoint("LEFT", 10 + indent, 0)
-          row.arrow:SetRotation(entry.folded and 0 or -math.pi / 2)
-          row.arrow:Show()
-          left = left + 14
+        local left, text = 6 + indent, entry.header
+        if classic then
+          -- The yellow band, with a plus or minus when the group folds.
+          row.stripe:SetColorTexture(1, 0.82, 0, 0.12)
+          if entry.sub then text = text .. "  " .. entry.sub end
+          if entry.folded ~= nil then text = (entry.folded and FOLDED or UNFOLDED) .. text end
         else
-          row.arrow:Hide()
+          -- A dark band with a bar in the group's colour (the accent without one), a fold
+          -- arrow when it folds, and the quiet part of the title in grey.
+          row.stripe:SetColorTexture(unpack(Skin.color.band))
+          local r, g, b = Skin.RGB(entry.color or Skin.ACCENT_HEX)
+          row.bar:SetColorTexture(r, g, b, 1)
+          row.bar:Show()
+          left = 12 + indent
+          if entry.folded ~= nil then
+            row.arrow:ClearAllPoints()
+            row.arrow:SetPoint("LEFT", 10 + indent, 0)
+            row.arrow:SetRotation(entry.folded and 0 or -math.pi / 2)
+            row.arrow:Show()
+            left = left + 14
+          else
+            row.arrow:Hide()
+          end
+          if entry.sub then text = text .. "  " .. ns.Color(GREY, entry.sub) end
         end
         row.icon:Hide()
         local rightWidth = entry.right and 220 or 0
         row.cells[1]:ClearAllPoints()
         row.cells[1]:SetPoint("LEFT", left, 0)
         row.cells[1]:SetWidth(width - left - 6 - rightWidth)
-        row.cells[1]:SetFontObject("GameFontHighlight")
-        row.cells[1]:SetText(entry.sub and (entry.header .. "  " .. ns.Color(GREY, entry.sub)) or entry.header)
+        row.cells[1]:SetFontObject(classic and "GameFontNormal" or "GameFontHighlight")
+        row.cells[1]:SetText(text)
         for c = 2, CELLS do row.cells[c]:SetText("") end
         row.right:ClearAllPoints()
         row.right:SetPoint("RIGHT", entry.portrait and -(ROW + 8) or -6, 0)
@@ -247,7 +357,7 @@ local function makeList(parent)
         row.right:SetText(entry.right or "")
         setPortrait(row, entry.portrait)
       else
-        row.stripe:SetColorTexture(1, 1, 1, i % 2 == 0 and 0.03 or 0)
+        row.stripe:SetColorTexture(1, 1, 1, i % 2 == 0 and (classic and 0.04 or 0.03) or 0)
         row.bar:Hide()
         row.arrow:Hide()
         row.right:SetText("")
@@ -255,20 +365,19 @@ local function makeList(parent)
         if entry.icon then
           row.icon:SetTexture(entry.icon)
           row.icon:ClearAllPoints()
-          row.icon:SetPoint("LEFT", 4 + indent, 0)
+          row.icon:SetPoint("LEFT", lefts[1] + 4 + indent, 0)
           row.icon:Show()
         else
           row.icon:Hide()
         end
         for c = 1, CELLS do
           local cell = row.cells[c]
-          local x = columns[c]
           local value = entry.cells[c]
-          if x and c < #columns and value then
-            local left = x + (c == 1 and indent + ROW + 4 or 0)
+          if lefts[c] and value then
+            local left = lefts[c] + (c == 1 and indent + ROW + 4 or 0)
             cell:ClearAllPoints()
             cell:SetPoint("LEFT", left, 0)
-            cell:SetWidth(columns[c + 1] - left - 6)
+            cell:SetWidth(lefts[c] + widths[c] - left - 6)
             cell:SetFontObject("GameFontHighlightSmall")
             cell:SetText(value)
           else
@@ -551,6 +660,7 @@ pages.writs = {
   sortKey = "writSort",
   sorts = { { "level", "By tier" }, { "profession", "By profession" }, { "cost", "By cost" } },
   footer = "scan",
+  order = { 1, 2, 4, 5, 6, 7, 3 },  -- the reputation at the end of the row
   build = function()
     local sort = ns.db.writSort
     local sorted, costs = {}, {}
@@ -1232,7 +1342,7 @@ function refresh()
   end
   if page.build then
     local entries, columns, text, headings = page.build()
-    list:Set(entries, columns, headings)
+    list:Set(entries, columns, headings, pages[key] and key or "overview", page.order)
     note:SetText(text or "")
     list.head:Show()
     list.scroll:Show()
@@ -1289,56 +1399,74 @@ local function build()
   window:Hide()
   tinsert(UISpecialFrames, "PuggerWaylaidCompanionWindow")
 
-  -- The menu: a darker column down the left, an entry a page. The page shown has the
-  -- accent bar and a lighter fill.
-  local side = Skin.Fill(window, Skin.color.side, "BACKGROUND", -6)
-  side:SetPoint("TOPLEFT", 1, -Skin.TITLE_HEIGHT - 2)
-  side:SetPoint("BOTTOMLEFT", 1, 1)
-  side:SetWidth(MENU - 4)
-  local sideEdge = Skin.Fill(window, Skin.color.line, "BORDER")
-  sideEdge:SetPoint("TOPLEFT", side, "TOPRIGHT")
-  sideEdge:SetPoint("BOTTOMLEFT", side, "BOTTOMRIGHT")
-  sideEdge:SetWidth(1)
+  -- The menu, an entry a page. Modern: a darker column down the left, the page shown
+  -- with the accent bar and a lighter fill. Classic: the game's buttons.
+  local classic = Skin.Classic()
+  if not classic then
+    local side = Skin.Fill(window, Skin.color.side, "BACKGROUND", -6)
+    side:SetPoint("TOPLEFT", 1, -Skin.TITLE_HEIGHT - 2)
+    side:SetPoint("BOTTOMLEFT", 1, 1)
+    side:SetWidth(MENU - 4)
+    local sideEdge = Skin.Fill(window, Skin.color.line, "BORDER")
+    sideEdge:SetPoint("TOPLEFT", side, "TOPRIGHT")
+    sideEdge:SetPoint("BOTTOMLEFT", side, "BOTTOMRIGHT")
+    sideEdge:SetWidth(1)
+  end
 
   local dim = Skin.color.dim
   window.menu = {}
   for i, key in ipairs(MENU_ORDER) do
-    local button = CreateFrame("Button", nil, window)
-    button:SetSize(MENU - 4, 30)
-    if key == "options" then
-      button:SetPoint("BOTTOMLEFT", 1, 8)
-    else
-      button:SetPoint("TOPLEFT", 1, -36 - (i - 1) * 32)
-    end
-    local hover = Skin.Fill(button, Skin.color.hover, "HIGHLIGHT")
-    hover:SetAllPoints()
-    button.fill = Skin.Fill(button, Skin.color.selected, "BACKGROUND")
-    button.fill:SetAllPoints()
-    button.bar = Skin.Fill(button, Skin.color.accent, "BORDER")
-    button.bar:SetPoint("TOPLEFT")
-    button.bar:SetPoint("BOTTOMLEFT")
-    button.bar:SetWidth(3)
-    button.icon = button:CreateTexture(nil, "ARTWORK")
-    button.icon:SetTexture(MENU_ICON[key])
-    button.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-    button.icon:SetSize(18, 18)
-    button.icon:SetPoint("LEFT", 14, 0)
-    button.label = button:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-    button.label:SetPoint("LEFT", button.icon, "RIGHT", 9, 0)
-    button.label:SetText(pages[key].title)
-    function button:SetSelected(on)
-      if on then
-        self.fill:Show()
-        self.bar:Show()
-        self.icon:SetDesaturated(false)
-        self.icon:SetAlpha(1)
-        self.label:SetTextColor(1, 1, 1)
+    local button
+    if classic then
+      button = CreateFrame("Button", nil, window, "UIPanelButtonTemplate")
+      button:SetSize(MENU - 20, 26)
+      if key == "options" then
+        button:SetPoint("BOTTOMLEFT", 14, 14)
       else
-        self.fill:Hide()
-        self.bar:Hide()
-        self.icon:SetDesaturated(true)
-        self.icon:SetAlpha(0.7)
-        self.label:SetTextColor(dim[1], dim[2], dim[3])
+        button:SetPoint("TOPLEFT", 14, -34 - (i - 1) * 30)
+      end
+      button:SetText(pages[key].title)
+      function button:SetSelected(on)
+        if on then self:LockHighlight() else self:UnlockHighlight() end
+      end
+    else
+      button = CreateFrame("Button", nil, window)
+      button:SetSize(MENU - 4, 30)
+      if key == "options" then
+        button:SetPoint("BOTTOMLEFT", 1, 8)
+      else
+        button:SetPoint("TOPLEFT", 1, -36 - (i - 1) * 32)
+      end
+      local hover = Skin.Fill(button, Skin.color.hover, "HIGHLIGHT")
+      hover:SetAllPoints()
+      button.fill = Skin.Fill(button, Skin.color.selected, "BACKGROUND")
+      button.fill:SetAllPoints()
+      button.bar = Skin.Fill(button, Skin.color.accent, "BORDER")
+      button.bar:SetPoint("TOPLEFT")
+      button.bar:SetPoint("BOTTOMLEFT")
+      button.bar:SetWidth(3)
+      button.icon = button:CreateTexture(nil, "ARTWORK")
+      button.icon:SetTexture(MENU_ICON[key])
+      button.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+      button.icon:SetSize(18, 18)
+      button.icon:SetPoint("LEFT", 14, 0)
+      button.label = button:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+      button.label:SetPoint("LEFT", button.icon, "RIGHT", 9, 0)
+      button.label:SetText(pages[key].title)
+      function button:SetSelected(on)
+        if on then
+          self.fill:Show()
+          self.bar:Show()
+          self.icon:SetDesaturated(false)
+          self.icon:SetAlpha(1)
+          self.label:SetTextColor(1, 1, 1)
+        else
+          self.fill:Hide()
+          self.bar:Hide()
+          self.icon:SetDesaturated(true)
+          self.icon:SetAlpha(0.7)
+          self.label:SetTextColor(dim[1], dim[2], dim[3])
+        end
       end
     end
     button:SetScript("OnClick", function()
@@ -1352,7 +1480,7 @@ local function build()
   -- The page.
   window.heading = window:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
   window.heading:SetPoint("TOPLEFT", MENU + 10, -38)
-  window.heading:SetTextColor(1, 1, 1)
+  Skin.Plain(window.heading)
 
   -- Sort buttons, right-aligned; a page lists the ones it has in `sorts`.
   sortBar = CreateFrame("Frame", nil, window)
@@ -1397,11 +1525,11 @@ local function build()
   scanBar.bar:SetPoint("LEFT", scanBar.button, "RIGHT", 10, 0)
   scanBar.bar:SetPoint("RIGHT", scanBar, "RIGHT", 0, 0)
   scanBar.bar:SetHeight(16)
-  scanBar.bar:SetStatusBarTexture(Skin.BAR)
+  scanBar.bar:SetStatusBarTexture(Skin.Bar())
   local back = scanBar.bar:CreateTexture(nil, "BACKGROUND")
   back:SetAllPoints()
   back:SetColorTexture(0, 0, 0, 0.5)
-  Skin.Border(scanBar.bar, Skin.color.line, "OVERLAY")
+  if not Skin.Classic() then Skin.Border(scanBar.bar, Skin.color.line, "OVERLAY") end
   scanBar.bar.text = scanBar.bar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
   scanBar.bar.text:SetPoint("LEFT", 6, 0)
   scanBar.bar.text:SetPoint("RIGHT", -6, 0)

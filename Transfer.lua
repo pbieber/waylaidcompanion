@@ -730,7 +730,7 @@ function ns.BuildTransfer(parent, width)
     local h = f:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
     h:SetPoint("TOPLEFT", 10, top)
     h:SetText(text)
-    h:SetTextColor(1, 1, 1)
+    ns.Skin.Plain(h)
     return h
   end
   local function line(top, font)

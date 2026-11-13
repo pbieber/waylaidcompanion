@@ -12,13 +12,15 @@ Open the window with `/pwc`, the minimap button or the addon compartment.
 - **Turn-ins**: every turn-in, by continent. Also marked on the world map.
 - **Rewards**: what your faction's quartermasters sell, one list per profession, each with its own quartermaster, by standing, with its cost and whether you can buy it. Learned the first time you open each quartermaster's shop.
 - **Transfer**: mail, bank and buying for writs (below).
-- **Options**, at the foot of the menu: show writ and crate costs per reputation and per favor, or absolute; the scale (per 1, 10, 100 or 1000 rep or favor, each on its own); item names by tier colour or in their in-game rarity colour (the tier then shows in the Profession column's colour, or in the Tier column when sorted by profession); and **Show both names**.
+- **Options**, at the foot of the menu: show writ and crate costs per reputation and per favor, or absolute; the scale (per 1, 10, 100 or 1000 rep or favor, each on its own); item names by tier colour or in their in-game rarity colour (the tier then shows in the Profession column's colour, or in the Tier column when sorted by profession); **Show both names**; and the window's **Style**, Modern (flat and dark) or Classic (the game's own frames), which changes after a reload.
 
 Click a group header to fold it.
 
 ## Prices
 
 Prices come from the addon's own auction house scan and from [Auctionator](https://www.curseforge.com/wow/addons/auctionator), whichever saw the item more recently. Auctionator is optional: without it, the scan alone fills in every price.
+
+On any list, drag a column's heading onto another to move the column there; each page remembers its order, and **Reset order** under Options puts them back. The writs page shows the reputation at the end of the row.
 
 To scan, open the auction house, then press **Scan AH** under the writs or crates list (or type `/pwc scan`). It searches every writ, every material a writ asks for, and every crate and what fills it, one item at a time, with a progress bar beside the button. Several hundred items take a few minutes. Closing the auction house stops the scan and keeps what it found. Prices are kept per realm and side.
 
