@@ -74,6 +74,10 @@ local function makeRow(parent)
     text:SetWordWrap(false)
     row.cells[i] = text
   end
+  -- A header's right-hand side: a name, and left of the portrait when there is one.
+  row.right = row:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+  row.right:SetJustifyH("RIGHT")
+  row.right:SetWordWrap(false)
   row:SetHighlightTexture("Interface/QuestFrame/UI-QuestTitleHighlight", "ADD")
   row:SetScript("OnEnter", showTooltip)
   row:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -81,6 +85,33 @@ local function makeRow(parent)
     if self.entry and self.entry.click then self.entry.click() end
   end)
   return row
+end
+
+--- Show a creature's face on a header row, from its NPC id: a 3D model zoomed to the
+--- head, like the game's own portraits (a flat portrait needs the NPC to be there).
+local function setPortrait(row, creature)
+  if not creature then
+    if row.portrait then row.portrait.wanted = false; row.portrait:Hide() end
+    return
+  end
+  if not row.portrait then
+    local model = CreateFrame("PlayerModel", nil, row)
+    model:SetSize(ROW - 2, ROW - 2)
+    model:SetPoint("RIGHT", -4, 0)
+    -- The zoom again once the model is in: some clients reset the camera then.
+    if model:HasScript("OnModelLoaded") then
+      model:SetScript("OnModelLoaded", function(self) self:SetPortraitZoom(1) end)
+    end
+    row.portrait = model
+  end
+  local model = row.portrait
+  if model.creature ~= creature then
+    model.creature = creature
+    if model.ClearModel then model:ClearModel() end
+    if model.SetCreature then pcall(model.SetCreature, model, creature) end
+    if model.SetPortraitZoom then model:SetPortraitZoom(1) end
+  end
+  model.wanted = true
 end
 
 local function makeList(parent)
@@ -117,8 +148,26 @@ local function makeList(parent)
     l.head.cells[i] = cell
   end
 
+  --- Show the portraits of rows that are wholly in view. A model is drawn over
+  --- everything, and isn't cut off at the edge of the scrolling list like the rest of a
+  --- row, so one partly out of view is hidden.
+  function l:Portraits()
+    local top, height = self.scroll:GetVerticalScroll() or 0, self.scroll:GetHeight() or 0
+    for i, row in ipairs(self.rows) do
+      local model = row.portrait
+      if model then
+        local y = (i - 1) * ROW
+        local inView = row:IsShown() and y >= top - 1 and y + ROW <= top + height + 1
+        model:SetShown(model.wanted == true and inView)
+      end
+    end
+  end
+  l.scroll:HookScript("OnVerticalScroll", function() l:Portraits() end)
+  l.scroll:HookScript("OnSizeChanged", function() l:Portraits() end)
+
   --- Draw entries. `columns` is the left edge of each cell, the last entry the width;
-  --- `headings` names the columns, each a text or { text, tip }.
+  --- `headings` names the columns, each a text or { text, tip }. A header entry may
+  --- have `right`, a text for its right-hand side, and `portrait`, an NPC id.
   function l:Set(entries, columns, headings)
     local width = columns[#columns]
     for c, cell in ipairs(self.head.cells) do
@@ -152,14 +201,22 @@ local function makeList(parent)
       if entry.header then
         row.stripe:SetColorTexture(1, 0.82, 0, 0.12)
         row.icon:Hide()
+        local rightWidth = entry.right and 220 or 0
         row.cells[1]:ClearAllPoints()
         row.cells[1]:SetPoint("LEFT", 6, 0)
-        row.cells[1]:SetWidth(width - 12)
+        row.cells[1]:SetWidth(width - 12 - rightWidth)
         row.cells[1]:SetFontObject("GameFontNormal")
         row.cells[1]:SetText(entry.header)
         for c = 2, CELLS do row.cells[c]:SetText("") end
+        row.right:ClearAllPoints()
+        row.right:SetPoint("RIGHT", entry.portrait and -(ROW + 8) or -6, 0)
+        row.right:SetWidth(rightWidth)
+        row.right:SetText(entry.right or "")
+        setPortrait(row, entry.portrait)
       else
         row.stripe:SetColorTexture(1, 1, 1, i % 2 == 0 and 0.04 or 0)
+        row.right:SetText("")
+        setPortrait(row, nil)
         if entry.icon then
           row.icon:SetTexture(entry.icon)
           row.icon:ClearAllPoints()
@@ -189,6 +246,7 @@ local function makeList(parent)
     end
     for i = #entries + 1, #self.rows do self.rows[i]:Hide() end
     self.child:SetHeight(math.max(1, #entries * ROW))
+    self:Portraits()
   end
   return l
 end
@@ -291,14 +349,21 @@ local FOLDED = "|TInterface/Buttons/UI-PlusButton-Up:14:14|t "
 local UNFOLDED = "|TInterface/Buttons/UI-MinusButton-Up:14:14|t "
 
 --- A group's header row, which folds the group away or opens it again on a click, and
---- whether the group is folded. Remembered per page, sort and group.
-local function groupHeader(page, sort, group, text)
+--- whether the group is folded. Remembered per page, sort and group; a group that starts
+--- folded stays so until opened.
+local function groupHeader(page, sort, group, text, startFolded)
   local key = ("%s:%s:%s"):format(page, sort, tostring(group))
-  local folded = ns.db.collapsed[key] == true
+  local stored = ns.db.collapsed[key]
+  local folded
+  if stored == nil then folded = startFolded == true else folded = stored == true end
   return {
     header = (folded and FOLDED or UNFOLDED) .. text,
     click = function()
-      ns.db.collapsed[key] = (not folded) or nil
+      if startFolded then
+        ns.db.collapsed[key] = not folded
+      else
+        ns.db.collapsed[key] = (not folded) or nil
+      end
       refresh()
     end,
   }, folded
@@ -651,6 +716,8 @@ local PROFESSION_NAME = {
   "First Aid", "Enchanting", "Fishing", "Jewelcrafting",
 }
 local GetItemInfoInstant = (C_Item and C_Item.GetItemInfoInstant) or GetItemInfoInstant
+-- The heading icon of a quartermaster that sells no recipes ("Misc").
+local MISC_ICON = "Interface/Icons/INV_Misc_Bag_10"
 
 --- The profession a quartermaster's shop is for: its name and icon, going by the recipes
 --- it sells (the game knows an item's kind without asking the server). nil for a shop
@@ -670,6 +737,63 @@ local function shopProfession(shop)
   return name[best] or PROFESSION_NAME[best], PROFESSION_ICON[best]
 end
 
+--- The Merchant's Favor a reward costs, or nil when it costs none.
+local function favorCost(item)
+  local total
+  for _, c in ipairs(item.costs or {}) do
+    if type(c.name) == "string" and c.name:find("Favor") then total = (total or 0) + c.value end
+  end
+  return total
+end
+
+-- "Requires %s (%d)" as a pattern capturing the skill and the level.
+local REQUIRES_SKILL = "^" .. (ITEM_MIN_SKILL or "Requires %s (%d)")
+  :gsub("([%(%)%.%%%+%-%*%?%[%]%^%$])", "%%%1"):gsub("%%%%s", "(.+)"):gsub("%%%%d", "(%%d+)") .. "$"
+
+local skillTip
+--- An item's tooltip lines, as text; empty while the game has no data for it yet.
+local function itemLines(id)
+  local out = {}
+  if C_TooltipInfo and C_TooltipInfo.GetItemByID then
+    local ok, data = pcall(C_TooltipInfo.GetItemByID, id)
+    for _, line in ipairs(ok and type(data) == "table" and data.lines or {}) do
+      if type(line.leftText) == "string" then out[#out + 1] = line.leftText end
+    end
+    if #out > 0 then return out end
+  end
+  if not skillTip then
+    skillTip = CreateFrame("GameTooltip", "PuggerWaylaidCompanionSkillTip", nil, "GameTooltipTemplate")
+  end
+  skillTip:SetOwner(WorldFrame or UIParent, "ANCHOR_NONE")
+  skillTip:ClearLines()
+  skillTip:SetItemByID(id)
+  for i = 1, skillTip:NumLines() do
+    local left = _G["PuggerWaylaidCompanionSkillTipTextLeft" .. i]
+    local text = left and left:GetText()
+    if type(text) == "string" then out[#out + 1] = text end
+  end
+  skillTip:Hide()
+  return out
+end
+
+local skills = {}
+--- The skill a recipe needs in its profession ("Requires Alchemy (65)": 65), or nil while
+--- unknown. A recipe's tooltip shows what it makes too, which can need the same skill, so
+--- the highest is the recipe's own. Kept once known.
+local function recipeSkill(id, profession)
+  if skills[id] ~= nil then return skills[id] or nil end
+  if not profession then return nil end
+  local best
+  for _, text in ipairs(itemLines(id)) do
+    local skill, level = text:match(REQUIRES_SKILL)
+    level = tonumber(level)
+    if skill == profession and level and (not best or level > best) then best = level end
+  end
+  -- None, once the game has the item: false, so it isn't read again.
+  if best or (GetItemInfo and GetItemInfo(id)) then skills[id] = best or false end
+  return best
+end
+
 pages.rewards = {
   title = "Rewards",
   build = function()
@@ -679,8 +803,9 @@ pages.rewards = {
     if not saved then
       return {}, REWARD_COLUMNS, "Not seen yet. Open each quartermaster's shop once.", headings
     end
-    -- One group per quartermaster, under its profession (by the NPC's name when it sells
-    -- no recipes, after the professions); its items by standing, then name.
+    -- One group per quartermaster, under its profession ("Misc" when it sells no
+    -- recipes, after the professions): what it sells for Merchant's Favor, cheapest
+    -- first and then by the skill the recipe needs, and below it, folded, the rest.
     local shops = {}
     for key, shop in pairs(saved) do
       local profession, icon = shopProfession(shop)
@@ -694,25 +819,36 @@ pages.rewards = {
     end)
     local entries = {}
     for _, s in ipairs(shops) do
-      local title = s.profession and ("|T%s:16:16|t %s"):format(s.icon, s.profession)
-        or (s.shop.npc or "Quartermaster")
+      local title = ("|T%s:16:16|t %s"):format(s.icon or MISC_ICON, s.profession or "Misc")
       local header, folded = groupHeader("rewards", "npc", s.key,
         ("%s (%d)"):format(title, #s.shop.items))
+      -- The quartermaster on the right, a shop without recipes ("Misc") too.
+      header.right = s.shop.npc
+      header.portrait = type(s.key) == "number" and s.key or nil
       entries[#entries + 1] = header
       if not folded then
-        local items = {}
-        for _, item in ipairs(s.shop.items) do items[#items + 1] = item end
-        table.sort(items, function(a, b)
-          local x, y = a.standing or 0, b.standing or 0
-          if x ~= y then return x < y end
-          return (a.name or "") < (b.name or "")
-        end)
-        for _, item in ipairs(items) do
-          local name, icon = ns.Item(item.id, item.name)
+        local forFavor, other, info = {}, {}, {}
+        for _, item in ipairs(s.shop.items) do
+          local name = ns.Item(item.id, item.name)
+          info[item] = { name = name, favor = favorCost(item), skill = recipeSkill(item.id, s.profession) }
+          table.insert(info[item].favor and forFavor or other, item)
+        end
+        -- Unknown amounts and skills (the game has not sent the item yet) last.
+        local function order(a, b)
+          local x, y = info[a], info[b]
+          if x.favor ~= y.favor then return (x.favor or math.huge) < (y.favor or math.huge) end
+          if x.skill ~= y.skill then return (x.skill or math.huge) < (y.skill or math.huge) end
+          return x.name < y.name
+        end
+        table.sort(forFavor, order)
+        table.sort(other, order)
+        local function add(item)
+          local name, icon = info[item].name, select(2, ns.Item(item.id, item.name))
           local quality = GetItemInfo and select(3, GetItemInfo(item.id))
           local color = quality and ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[quality]
           if color and color.hex then name = color.hex .. name .. "|r" end
           if (item.quantity or 1) > 1 then name = item.quantity .. " x " .. name end
+          if info[item].skill then name = name .. ns.Color(GREY, (" (%d)"):format(info[item].skill)) end
           local open = not item.standing or rep.standing >= item.standing
           entries[#entries + 1] = {
             icon = icon or item.icon,
@@ -724,6 +860,15 @@ pages.rewards = {
               open and ns.Color(GREEN, "Available") or ns.Color(GREY, "Locked"),
             },
           }
+        end
+        for _, item in ipairs(forFavor) do add(item) end
+        if #other > 0 then
+          local sub, subFolded = groupHeader("rewards", "other", s.key,
+            ("    Not for Merchant's Favor (%d)"):format(#other), true)
+          entries[#entries + 1] = sub
+          if not subFolded then
+            for _, item in ipairs(other) do add(item) end
+          end
         end
       end
     end
