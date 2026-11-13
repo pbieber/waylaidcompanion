@@ -7,7 +7,9 @@ player's trade faction, every item of that shop is saved, account-wide, by facti
 and quartermaster (the NPC id, or its name without one): { [npc] = { npc (name), time,
 items = { { id, name, icon, price, quantity, standing (1 Hated .. 8 Exalted, nil when none
 is required), costs = { { value, name, icon } } } } } }. The next visit to that
-quartermaster replaces its list. UI.lua shows them on the Rewards page.
+quartermaster replaces its list. Lists other players shared (Share.lua) and the shipped
+ones in Data/Recorded.lua (ns.RECORDED_REWARDS, the same shape) fill in the
+quartermasters this account has not seen. UI.lua shows them on the Rewards page.
 
 The quartermasters' items say "Requires Honored with this faction." Other merchants' may
 name the faction: "Requires <faction> - <standing>". Items the client has not seen before
@@ -178,7 +180,8 @@ local function scan()
   if not rep or not ns.db or not GetMerchantNumItems then return end
   ns.db.shopDump = nil -- left by a test build of /pwc shop
   local list, key = shops(rep.name), shopKey()
-  local items, ours = read(rep, list[key])
+  local shipped = ns.RECORDED_REWARDS and ns.RECORDED_REWARDS[rep.name]
+  local items, ours = read(rep, list[key] or (shipped and shipped[key]))
   if not ours then return end
   local npc = readable(UnitName and UnitName("npc"))
   -- The same quartermaster saved under another key: by name, before 0.5.1.
@@ -194,7 +197,21 @@ end
 function ns.Rewards()
   local rep = ns.Reputation()
   if not (rep and ns.db) then return nil, rep end
-  local list = shops(rep.name)
+  -- The shipped lists, then this account's where it saw the shop since.
+  local list = {}
+  for key, shop in pairs(ns.RECORDED_REWARDS and ns.RECORDED_REWARDS[rep.name] or {}) do list[key] = shop end
+  for key, shop in pairs(shops(rep.name)) do
+    local old = list[key]
+    if not old or (shop.time or 0) >= (old.time or 0) then list[key] = shop end
+  end
+  -- A shop kept by name (before 0.5.1) that is also there by NPC id.
+  local byId = {}
+  for key, shop in pairs(list) do
+    if type(key) == "number" and shop.npc then byId[shop.npc] = true end
+  end
+  for key, shop in pairs(list) do
+    if type(key) == "string" and byId[shop.npc] then list[key] = nil end
+  end
   return next(list) and list or nil, rep
 end
 

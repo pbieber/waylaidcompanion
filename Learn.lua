@@ -224,7 +224,7 @@ end
 --- the other side, the data is wrong: keep that, so the writ is listed and marked.
 local function noteSide(writ)
   local side = ns.Side()
-  if not writ.side or not side or writ.side == side or ns.db.anySide[writ.quest] then return end
+  if not writ.side or not side or writ.side == side or ns.AnySide(writ.quest) then return end
   ns.db.anySide[writ.quest] = true
   print(("%s: %s is not %s only. Listed."):format(
     ns.TITLE, writ.name, writ.side == "A" and "Alliance" or "Horde"))

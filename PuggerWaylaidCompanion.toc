@@ -2,7 +2,7 @@
 ## Title: |cffffc94aPugger|r Waylaid Companion
 ## Notes: Craftsman's Writs, Waylaid Crates and their turn-ins for Durotar Supply and Logistics and the Azeroth Commerce Authority.
 ## Author: Peter
-## Version: 0.5.1
+## Version: 0.6.0
 ## IconTexture: Interface/AddOns/PuggerWaylaidCompanion/Media/pugger
 ## Category-enUS: Auctions
 ## SavedVariables: PuggerWaylaidCompanionDB
@@ -18,6 +18,7 @@ Scan.lua
 Buy.lua
 Transfer.lua
 Rewards.lua
+Share.lua
 Overview.lua
 UI.lua
 Map.lua

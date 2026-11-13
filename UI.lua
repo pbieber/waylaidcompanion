@@ -321,7 +321,7 @@ local function writEntry(writ, sort, cost)
   else
     tip = tip .. "\nTurn-in unknown. Saved when you accept the quest."
   end
-  if writ.side then
+  if writ.side and not ns.AnySide(writ.quest) then
     tip = tip .. "\n" .. (writ.side == "A" and "Alliance only." or "Horde only.")
   end
   return {

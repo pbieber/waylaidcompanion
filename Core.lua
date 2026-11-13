@@ -366,12 +366,19 @@ for quest, id in pairs(ns.RECORDED_WRITS or {}) do
   if writ and not writ.npc and ns.WRIT_NPCS[id] then writ.npc = id end
 end
 
+--- Whether a writ the data limits to one side has been had on the other: by this account,
+--- by a player who shared it, or as recorded in Data/Recorded.lua.
+function ns.AnySide(quest)
+  return (ns.db ~= nil and ns.db.anySide[quest] == true)
+    or (ns.RECORDED_ANYSIDE ~= nil and ns.RECORDED_ANYSIDE[quest] == true)
+end
+
 --- Whether the player's side can do a writ. A few are limited to one side, going by data
---- that is not always right: a writ this account has had on the other side counts too.
+--- that is not always right: a writ had on the other side counts too (ns.AnySide).
 function ns.ForPlayer(writ)
   local side = ns.Side()
   if writ.side == nil or side == nil or writ.side == side then return true end
-  return ns.db ~= nil and ns.db.anySide[writ.quest] == true
+  return ns.AnySide(writ.quest)
 end
 
 --- Where a writ is handed in: { id, name, map, x, y, zone }, from the shipped data or
@@ -701,6 +708,10 @@ SlashCmdList.PUGGERWAYLAID = function(msg)
     ns.Changed()
   elseif msg == "scan" then
     if ns.ToggleScan then ns.ToggleScan() end
+  elseif msg == "export" then
+    if ns.ShowExport then ns.ShowExport() end
+  elseif msg == "import" then
+    if ns.ShowImport then ns.ShowImport() end
   elseif msg == "shop" then
     if ns.ShopReport then ns.ShopReport() end
   elseif msg == "where" then
