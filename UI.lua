@@ -1296,6 +1296,8 @@ local function ago(when)
   return ("%d day%s"):format(days, days == 1 and "" or "s")
 end
 
+local SCAN_NAMES = { writs = "Writs", crates = "Crates", all = "Writs and crates" }
+
 --- Bring the scan button and progress bar up to date.
 local function updateScanBar()
   if not scanBar then return end
@@ -1307,12 +1309,14 @@ local function updateScanBar()
     bar:SetMinMaxValues(0, math.max(1, p.total))
     bar:SetValue(p.done)
     bar:SetStatusBarColor(0.2, 0.55, 0.25)
-    bar.text:SetText(("%d / %d  %s"):format(p.done, p.total, p.item or ""))
+    -- Name what is being scanned when it isn't this page's items.
+    local what = p.scope ~= scanBar.scope and (SCAN_NAMES[p.scope or "all"] .. ": ") or ""
+    bar.text:SetText(("%s%d / %d  %s"):format(what, p.done, p.total, p.item or ""))
     return
   end
   button:SetText("Scan AH")
   button:SetEnabled(ns.CanScan() and ns.AuctionHouseOpen())
-  local lastScan = ns.LastScanTime()
+  local lastScan = ns.LastScanTime(scanBar.scope)
   bar:SetMinMaxValues(0, 1)
   bar:SetValue(lastScan and 1 or 0)
   bar:SetStatusBarColor(0.22, 0.22, 0.25)
@@ -1355,6 +1359,8 @@ function refresh()
   end
 
   if page.footer == "scan" then
+    -- The scan button scans the items this page prices.
+    scanBar.scope = key
     note:Hide()
     scanBar:Show()
     updateScanBar()
@@ -1510,7 +1516,8 @@ local function build()
   note:SetJustifyH("LEFT")
   note:SetJustifyV("MIDDLE")
 
-  -- The writs and crates pages' foot: the auction house scan and its progress.
+  -- The writs and crates pages' foot: the auction house scan of the page's items, and
+  -- its progress.
   scanBar = CreateFrame("Frame", nil, window)
   scanBar:SetPoint("BOTTOMLEFT", MENU + 8, 12)
   scanBar:SetPoint("BOTTOMRIGHT", -14, 12)
@@ -1519,7 +1526,7 @@ local function build()
 
   scanBar.button = Skin.Button(scanBar, "", 150, 22)
   scanBar.button:SetPoint("LEFT", 0, 0)
-  scanBar.button:SetScript("OnClick", ns.ToggleScan)
+  scanBar.button:SetScript("OnClick", function() ns.ToggleScan(scanBar.scope) end)
 
   scanBar.bar = CreateFrame("StatusBar", nil, scanBar)
   scanBar.bar:SetPoint("LEFT", scanBar.button, "RIGHT", 10, 0)

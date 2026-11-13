@@ -750,8 +750,9 @@ SlashCmdList.PUGGERWAYLAID = function(msg)
     ns.db.ownerNames = ns.db.ownerNames == 2 and 1 or 2
     print(ns.TITLE .. ": " .. (ns.db.ownerNames == 2 and "first name and surname." or "first name only."))
     ns.Changed()
-  elseif msg == "scan" then
-    if ns.ToggleScan then ns.ToggleScan() end
+  elseif msg == "scan" or msg == "scan writs" or msg == "scan crates" then
+    -- Both pages' items, or one page's.
+    if ns.ToggleScan then ns.ToggleScan(msg:match("^scan (%a+)$")) end
   elseif msg == "export" then
     if ns.ShowExport then ns.ShowExport() end
   elseif msg == "import" then

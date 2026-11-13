@@ -22,7 +22,7 @@ Prices come from the addon's own auction house scan and from [Auctionator](https
 
 On any list, drag a column's heading onto another to move the column there; each page remembers its order, and **Reset order** under Options puts them back. The writs page shows the reputation at the end of the row.
 
-To scan, open the auction house, then press **Scan AH** under the writs or crates list (or type `/pwc scan`). It searches every writ, every material a writ asks for, and every crate and what fills it, one item at a time, with a progress bar beside the button. Several hundred items take a few minutes. Closing the auction house stops the scan and keeps what it found. Prices are kept per realm and side.
+To scan, open the auction house, then press **Scan AH** under a list. Under the writs list it searches every writ and every material a writ asks for; under the crates list every crate and what fills it. It goes one item at a time, with a progress bar beside the button; a few hundred items take a few minutes. `/pwc scan` searches both lists' items. Closing the auction house stops the scan and keeps what it found. Prices are kept per realm and side.
 
 In the Cost / 100 rep column:
 
@@ -71,7 +71,7 @@ The Owned column counts the writs on every character of the account: bags, bank 
 | `/pwc writs`, `/pwc crates`, `/pwc turnins`, `/pwc rewards`, `/pwc transfer`, `/pwc options` | Open the window on that page |
 | `/pwc map` | Show or hide the world map markers |
 | `/pwc minimap` | Show or hide the minimap button |
-| `/pwc scan` | Start or stop the auction house scan |
+| `/pwc scan` | Start or stop the auction house scan of writs and crates (`/pwc scan writs`, `/pwc scan crates`: one) |
 | `/pwc names` | Show first name only, or first name and surname |
 | `/pwc where` | Print what the game reports for each writ in the quest log |
 | `/pwc export` | Show a string of what the addon has learned, to share |
