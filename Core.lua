@@ -311,20 +311,21 @@ end
 --- What a crate costs to fill from nothing with each of its bundles, and with the
 --- cheapest of them that has a price.
 ---
---- { crate (the empty crate's price), favor (the least Merchant's Favor its tier pays,
----   which is a white crate's),
+--- { crate (the empty crate's price), favor (the Merchant's Favor it pays), refund (the
+---   money its turn-in pays back; 0 with that option off),
 ---   bundles = { [bundle] = part }, cheapest (the cheapest bundle,
 ---   nil when none has a price), and the cheapest's part fields }
 ---
 --- Each part: { each, material (each x count), total (crate and material, of what has a
 --- price), partial (the crate or the material has no price), age (days since the older
---- of the two prices was seen), old (that is OLD_PRICE_DAYS or more), perFavor (total
---- for each Merchant's Favor; nil without a price or a favor amount) }.
+--- of the two prices was seen), old (that is OLD_PRICE_DAYS or more), net (total less
+--- the refund, not below 0; nil without a price), perFavor (net for each Merchant's
+--- Favor; nil without a price or a favor amount) }.
 function ns.CrateCost(crate)
   local box, boxAge = ns.PriceInfo(crate.item)
-  local least = ns.CrateFavor(crate.tier)[1]
-  local favor = least and least.amount
-  local cost = { crate = box, favor = favor, bundles = {} }
+  local favor = ns.CrateFavor(crate)
+  local refund = (not ns.db or ns.db.crateRefund ~= false) and ns.CrateRefund(crate) or 0
+  local cost = { crate = box, favor = favor, refund = refund, bundles = {} }
   for _, b in ipairs(crate.bundles) do
     local each, eachAge = ns.PriceInfo(b.item)
     local material = each and each * b.count
@@ -336,8 +337,9 @@ function ns.CrateCost(crate)
     local part = {
       each = each, material = material, total = total, partial = not (box and material),
       age = age, old = age ~= nil and age >= ns.OLD_PRICE_DAYS,
-      perFavor = favor and (box or material) and total / favor or nil,
+      net = (box or material) and math.max(0, total - refund) or nil,
     }
+    part.perFavor = favor and part.net and part.net / favor or nil
     cost.bundles[b] = part
     if material and (not cost.cheapest or material < cost.bundles[cost.cheapest].material) then
       cost.cheapest = b
@@ -351,7 +353,8 @@ function ns.CrateCost(crate)
     cost.total, cost.partial = box or 0, true
     cost.age = box and boxAge or nil
     cost.old = cost.age ~= nil and cost.age >= ns.OLD_PRICE_DAYS
-    cost.perFavor = favor and box and box / favor or nil
+    cost.net = box and math.max(0, box - refund) or nil
+    cost.perFavor = favor and cost.net and cost.net / favor or nil
   end
   return cost
 end
@@ -504,21 +507,24 @@ end
 
 ns.crates = {}
 for _, row in ipairs(ns.CRATES) do
-  local crate = { item = row[1], tier = row[2], kind = row[3], name = row[4], bundles = {} }
+  local crate = { item = row[1], tier = row[2], kind = row[3], name = row[4], bundles = {},
+    quality = ns.CRATE_QUALITY[row[3]] or 1 }
   for _, b in ipairs(row[5]) do
     crate.bundles[#crate.bundles + 1] = { item = b[1], count = b[2], name = b[3] }
   end
   ns.crates[#ns.crates + 1] = crate
 end
 
---- The Merchant's Favor a filled crate of a tier pays, for each quality of crate, white
---- first: { { quality (1 white, 2 green), amount }, ... }.
-function ns.CrateFavor(tier)
-  local list = {}
-  for quality, amount in ipairs(ns.CRATE_FAVOR[tier] or {}) do
-    list[#list + 1] = { quality = quality, amount = amount }
-  end
-  return list
+--- The Merchant's Favor a crate pays when handed in filled: its tier's amount for its
+--- quality (white or green). nil when unknown.
+function ns.CrateFavor(crate)
+  local pays = ns.CRATE_FAVOR[crate.tier]
+  return pays and pays[crate.quality] or nil
+end
+
+--- The money handing in a filled crate pays, in copper: half its favor in silver.
+function ns.CrateRefund(crate)
+  return (ns.CrateFavor(crate) or 0) * ns.CRATE_COPPER_PER_FAVOR
 end
 
 --- The player's crate turn-in: { id, name, map, x, y, zone, faction }, nil for no side.
@@ -616,11 +622,12 @@ end
 
 -- ownerNames: 2 shows characters by first name and surname ("Show both names"), 1 by first name.
 -- writCost and crateCost: "per" shows a cost per repScale reputation or per favorScale
--- Merchant's Favor, "total" what a writ or crate costs in all. itemColor: "tier" colours
+-- Merchant's Favor, "total" what a writ or crate costs in all. crateRefund: a crate's cost
+-- is less the silver its turn-in pays back. itemColor: "tier" colours
 -- writ and crate names by tier, "rarity" in the game's colour for the item. theme: "modern"
 -- draws the windows flat and dark, "classic" with the game's own frames (Theme.lua).
 local DEFAULTS = { page = "overview", writSort = "level", crateSort = "level", pins = true, ownerNames = 1,
-  writCost = "per", crateCost = "per", repScale = 100, favorScale = 1, itemColor = "tier",
+  writCost = "per", crateCost = "per", repScale = 100, favorScale = 1, crateRefund = true, itemColor = "tier",
   theme = "modern" }
 
 local listeners = {}

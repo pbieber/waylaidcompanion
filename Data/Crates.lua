@@ -116,5 +116,17 @@ ns.CRATE_QUALITY_COLOR = { "ffffffff", "ff1eff00" }
 -- in every other tier.
 ns.CRATE_FAVOR = { { 5, 10 }, { 10, 20 }, { 15, 30 }, { 20, 40 } }
 
+-- The quality of each kind of crate (1 white, 2 green), as the game's item links have
+-- them (2026-11-13): crates of gathered goods are white, crates of crafted goods green.
+ns.CRATE_QUALITY = {
+  Herbs = 1, Ore = 1, Textiles = 1, Curiosities = 1,
+  Ingots = 2, Fabrics = 2, Parts = 2,
+}
+
+-- Handing in a filled crate also pays money: half its favor in silver (5 favor, 2s 50c),
+-- as the turn-ins recorded in game paid (white 250, 500, 750, 1000 copper by tier; green
+-- 500, 1000, 1500).
+ns.CRATE_COPPER_PER_FAVOR = 50
+
 -- Player level a crate of each tier asks for.
 ns.CRATE_LEVEL = { 10, 10, 20, 35 }

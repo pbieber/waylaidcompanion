@@ -750,7 +750,7 @@ local function crateCostTip()
   local what = "The crate and one material"
   if perFavor() then
     what = what .. " per " .. ns.ScaleLabel(ns.db.favorScale, "Merchant's Favor")
-      .. " (the least the crate pays)"
+      .. (ns.db.crateRefund ~= false and ", less the silver the turn-in pays back" or "")
   end
   return what .. ", at AH prices (your scan or Auctionator, newest).\n"
     .. "On a crate: its cheapest material. On a material: that one.\n"
@@ -764,7 +764,7 @@ end
 --- all. nil when nothing has a price, or per favor while the favor is unknown.
 local function crateValue(part)
   if perFavor() then return part.perFavor and part.perFavor * ns.db.favorScale end
-  return (part.total or 0) > 0 and part.total or nil
+  return (part.total or 0) > 0 and part.net or nil
 end
 
 --- A crate's or a bundle's Cost column: the money, "+ ?" when a part of it has no price
@@ -784,22 +784,22 @@ local function crateCostText(part, cost)
 end
 
 --- Tooltip lines for a crate filled with one bundle: what it costs, in all and by part,
---- and per favorScale favor for each quality of crate.
+--- the silver its turn-in pays back, and per favorScale favor.
 local function crateCostLines(lines, crate, cost, bundle, name)
   local part = cost.bundles[bundle] or {}
   costLines(lines, { { "Crate", cost.crate }, { name, part.material } })
   if part.each and bundle.count > 1 then lines[#lines + 1] = { "  Each", ns.Coins(part.each) } end
   if not ns.HasPrices() then return end
   local label = "Cost / " .. ns.ScaleLabel(ns.db.favorScale, "favor")
-  local pays = ns.CrateFavor(crate.tier)
-  if #pays == 0 then
+  if cost.refund > 0 and part.net then
+    lines[#lines + 1] = { "  Turn-in pays back", "-" .. ns.Coins(cost.refund) }
+  end
+  if not cost.favor then
     lines[#lines + 1] = { ns.Color(GOLD, label), ns.Color(GREY, "favor unknown") }
   elseif part.perFavor then
-    for _, pay in ipairs(pays) do
-      lines[#lines + 1] = {
-        ns.Color(GOLD, ("%s (%s, pays %d)"):format(label, ns.CRATE_QUALITIES[pay.quality], pay.amount)),
-        ns.Coins(part.total / pay.amount * ns.db.favorScale) .. (part.partial and " + ?" or "") }
-    end
+    lines[#lines + 1] = {
+      ns.Color(GOLD, ("%s (pays %d)"):format(label, cost.favor)),
+      ns.Coins(part.perFavor * ns.db.favorScale) .. (part.partial and " + ?" or "") }
   end
   if part.partial and part.total and part.total > 0 then
     lines[#lines + 1] = { ns.Color(ORANGE, ("  No price: %s"):format(cost.crate and name or "crate")) }
@@ -824,17 +824,14 @@ local CRATE_COST_HEADERS = {
   none = "No price",
 }
 
---- The Merchant's Favor column for a crate tier, each quality's amount in its colour
---- ("15 / 30"), and the line for its tooltip.
-local function favorText(tier)
-  local pays = ns.CrateFavor(tier)
-  if #pays == 0 then return ns.Color(GREY, "Unknown"), "Merchant's Favor unknown." end
-  local cells, words = {}, {}
-  for _, pay in ipairs(pays) do
-    cells[#cells + 1] = ns.Color(ns.CRATE_QUALITY_COLOR[pay.quality], tostring(pay.amount))
-    words[#words + 1] = ("%d for a %s crate"):format(pay.amount, ns.CRATE_QUALITIES[pay.quality])
-  end
-  return table.concat(cells, ns.Color(GREY, " / ")), "Merchant's Favor: " .. table.concat(words, ", ") .. "."
+--- The Merchant's Favor column for a crate, the amount in its quality's colour (white
+--- or green), and the line for its tooltip.
+local function favorText(crate)
+  local favor = ns.CrateFavor(crate)
+  if not favor then return ns.Color(GREY, "Unknown"), "Merchant's Favor unknown." end
+  return ns.Color(ns.CRATE_QUALITY_COLOR[crate.quality], tostring(favor)),
+    ("Merchant's Favor: %d (a %s crate), and %s back."):format(
+      favor, ns.CRATE_QUALITIES[crate.quality], ns.Coins(ns.CrateRefund(crate)))
 end
 
 pages.crates = {
@@ -901,7 +898,7 @@ pages.crates = {
       end
       if not folded then
         local _, icon = ns.Item(crate.item)
-        local favor, favorTip = favorText(crate.tier)
+        local favor, favorTip = favorText(crate)
         -- By profession: the tier and the level it needs. Otherwise the profession, in the
         -- tier's colour, so the tier shows when names are in their rarity colour (Options).
         local tierColor = ns.CRATE_COLOR[crate.tier]
@@ -966,7 +963,7 @@ pages.crates = {
               elseif now.cheapest then
                 local b = now.cheapest
                 lines[#lines + 1] = { ns.Color(GREY, ("Cheapest: %d x %s"):format(b.count, ns.Item(b.item, b.name))),
-                  ns.Color(GREY, ns.Coins(now.total)) }
+                  ns.Color(GREY, ns.Coins(now.net or now.total)) }
               end
               return lines
             end,

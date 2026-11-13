@@ -2,7 +2,8 @@
 The Options page: how the writs and crates pages show cost, and how characters are named.
 
   - Craftsman's Writs: cost per reputation or in all; per 1, 10, 100 or 1000 rep.
-  - Waylaid Crates: cost per Merchant's Favor or in all; per 1, 10, 100 or 1000 favor.
+  - Waylaid Crates: cost per Merchant's Favor or in all; per 1, 10, 100 or 1000 favor;
+    whether the silver a turn-in pays back comes off the cost.
   - Items: names coloured by writ or crate tier, or by the item's rarity as in game.
   - Characters: "Show both names" (first name and surname) in the Owned columns.
   - Window: the modern or the classic style (after a reload), and the columns' order.
@@ -97,8 +98,20 @@ function ns.BuildOptions(parent, width)
     { "total", "Absolute" },
   })
   choice("Scale", top - 28 - ROW, "favorScale", scales("favor"))
-  note("Per favor: the crate and a material for that much Merchant's Favor, at the least a crate "
-    .. "pays. Absolute: what one filled crate costs.", top - 28 - 2 * ROW)
+  -- Beside the Cost boxes: whether a crate's cost is less the silver its turn-in pays back.
+  local refund = CreateFrame("CheckButton", nil, f, "UICheckButtonTemplate")
+  refund:SetSize(24, 24)
+  refund:SetPoint("TOPLEFT", 10 + LABEL_W + 2 * (BUTTON_W + 4) + 12, top - 27)
+  local refundLabel = refund:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+  refundLabel:SetPoint("LEFT", refund, "RIGHT", 2, 0)
+  refundLabel:SetText("Count the turn-in's silver")
+  refund:SetScript("OnClick", function(self)
+    ns.db.crateRefund = self:GetChecked() and true or false
+  end)
+  controls[#controls + 1] = { Refresh = function() refund:SetChecked(ns.db.crateRefund ~= false) end }
+  note("Per favor: the crate and a material for that much of the Merchant's Favor it pays. "
+    .. "Absolute: what one filled crate costs. Ticked: less the silver its turn-in pays back.",
+    top - 28 - 2 * ROW)
 
   top = top - 28 - 2 * ROW - 34
   heading("Items", top)
