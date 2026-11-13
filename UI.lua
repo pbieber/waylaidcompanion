@@ -643,43 +643,47 @@ pages.rewards = {
     local headings = { "Item", "Standing", "Cost", "Status" }
     if not rep then return {}, REWARD_COLUMNS, "Faction unknown.", headings end
     if not saved then
-      return {}, REWARD_COLUMNS, "Not seen yet. Open the quartermaster's shop once.", headings
+      return {}, REWARD_COLUMNS, "Not seen yet. Open each quartermaster's shop once.", headings
     end
-    local items = {}
-    for _, item in ipairs(saved.items) do items[#items + 1] = item end
-    table.sort(items, function(a, b)
-      local x, y = a.standing or 0, b.standing or 0
-      if x ~= y then return x < y end
-      return (a.name or "") < (b.name or "")
-    end)
-    local entries, last, folded = {}, nil, false
-    for _, item in ipairs(items) do
-      local group = item.standing or 0
-      if group ~= last then
-        last = group
-        entries[#entries + 1], folded = groupHeader("rewards", "standing", group,
-          group == 0 and "No standing required" or ns.StandingName(group))
-      end
+    -- One group per quartermaster, by name; its items by standing, then name.
+    local shops = {}
+    for key, shop in pairs(saved) do shops[#shops + 1] = { key = key, shop = shop } end
+    table.sort(shops, function(a, b) return (a.shop.npc or "") < (b.shop.npc or "") end)
+    local entries = {}
+    for _, s in ipairs(shops) do
+      local header, folded = groupHeader("rewards", "npc", s.key,
+        ("%s (%d)"):format(s.shop.npc or "Quartermaster", #s.shop.items))
+      entries[#entries + 1] = header
       if not folded then
-        local name, icon = ns.Item(item.id, item.name)
-        local quality = GetItemInfo and select(3, GetItemInfo(item.id))
-        local color = quality and ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[quality]
-        if color and color.hex then name = color.hex .. name .. "|r" end
-        if (item.quantity or 1) > 1 then name = item.quantity .. " x " .. name end
-        local open = not item.standing or rep.standing >= item.standing
-        entries[#entries + 1] = {
-          icon = icon or item.icon,
-          item = item.id,
-          cells = {
-            name,
-            item.standing and ns.StandingName(item.standing) or ns.Color(GREY, "None"),
-            rewardCost(item),
-            open and ns.Color(GREEN, "Available") or ns.Color(GREY, "Locked"),
-          },
-        }
+        local items = {}
+        for _, item in ipairs(s.shop.items) do items[#items + 1] = item end
+        table.sort(items, function(a, b)
+          local x, y = a.standing or 0, b.standing or 0
+          if x ~= y then return x < y end
+          return (a.name or "") < (b.name or "")
+        end)
+        for _, item in ipairs(items) do
+          local name, icon = ns.Item(item.id, item.name)
+          local quality = GetItemInfo and select(3, GetItemInfo(item.id))
+          local color = quality and ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[quality]
+          if color and color.hex then name = color.hex .. name .. "|r" end
+          if (item.quantity or 1) > 1 then name = item.quantity .. " x " .. name end
+          local open = not item.standing or rep.standing >= item.standing
+          entries[#entries + 1] = {
+            icon = icon or item.icon,
+            item = item.id,
+            cells = {
+              name,
+              item.standing and ns.StandingName(item.standing) or ns.Color(GREY, "None"),
+              rewardCost(item),
+              open and ns.Color(GREEN, "Available") or ns.Color(GREY, "Locked"),
+            },
+          }
+        end
       end
     end
-    local note = ("From %s."):format(saved.npc or "the quartermaster")
+    local note = ("%d quartermaster%s seen. Open another's shop to add it.")
+      :format(#shops, #shops == 1 and "" or "s")
     return entries, REWARD_COLUMNS, note, headings
   end,
 }

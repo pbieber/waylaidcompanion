@@ -701,6 +701,8 @@ SlashCmdList.PUGGERWAYLAID = function(msg)
     ns.Changed()
   elseif msg == "scan" then
     if ns.ToggleScan then ns.ToggleScan() end
+  elseif msg == "shop" then
+    if ns.ShopReport then ns.ShopReport() end
   elseif msg == "where" then
     ns.Where()
   elseif ns.Toggle then

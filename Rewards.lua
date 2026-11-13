@@ -1,11 +1,18 @@
 --[[
-The trade faction's rewards: what its quartermaster sells, learned in game.
+The trade faction's rewards: what its quartermasters sell, learned in game. Each
+profession has its own quartermaster.
 
-When a merchant's shop opens and any of its items requires the player's trade faction
-(the tooltip's "Requires <faction> - <standing>"), every item of that shop is saved,
-account-wide, by faction name: { npc, time, items = { { id, name, icon, price, quantity,
-standing (1 Hated .. 8 Exalted, nil when none is required), costs = { { value, name,
-icon } } } } }. The next visit replaces the list. UI.lua shows it on the Rewards page.
+When a merchant's shop opens and any of its items costs Merchant's Favor or requires the
+player's trade faction, every item of that shop is saved, account-wide, by faction name
+and quartermaster (the NPC id, or its name without one): { [npc] = { npc (name), time,
+items = { { id, name, icon, price, quantity, standing (1 Hated .. 8 Exalted, nil when none
+is required), costs = { { value, name, icon } } } } } }. The next visit to that
+quartermaster replaces its list. UI.lua shows them on the Rewards page.
+
+The quartermasters' items say "Requires Honored with this faction." Other merchants' may
+name the faction: "Requires <faction> - <standing>". Items the client has not seen before
+have neither line until their data arrives, so the shop is scanned again as it does, for
+as long as it is open.
 ]]
 
 local _, ns = ...
@@ -15,29 +22,40 @@ if not CreateFrame then return end
 local REQUIRES = (ITEM_REQ_REPUTATION or "Requires %s - %s")
   :gsub("([%(%)%.%%%+%-%*%?%[%]%^%$])", "%%%1"):gsub("%%%%s", "(.+)")
 REQUIRES = "^" .. REQUIRES .. "$"
+-- The merchant's own faction: "Requires Honored with this faction."
+local REQUIRES_OWN = "^Requires (.+) with this faction%.?$"
 
 local scanTip
 
---- The tooltip lines of a merchant item, as text.
-local function tooltipLines(index)
+--- The tooltip lines of a merchant item, as text, from the tooltip data API.
+local function dataLines(index)
   local out = {}
-  if C_TooltipInfo and C_TooltipInfo.GetMerchantItem then
-    local data = C_TooltipInfo.GetMerchantItem(index)
-    for _, line in ipairs(data and data.lines or {}) do
-      if type(line.leftText) == "string" then out[#out + 1] = line.leftText end
-    end
-    return out
+  if not (C_TooltipInfo and C_TooltipInfo.GetMerchantItem) then return out end
+  local ok, data = pcall(C_TooltipInfo.GetMerchantItem, index)
+  if not ok or type(data) ~= "table" then return out end
+  if TooltipUtil and TooltipUtil.SurfaceArgs then pcall(TooltipUtil.SurfaceArgs, data) end
+  for _, line in ipairs(data.lines or {}) do
+    if TooltipUtil and TooltipUtil.SurfaceArgs then pcall(TooltipUtil.SurfaceArgs, line) end
+    if type(line.leftText) == "string" then out[#out + 1] = line.leftText end
   end
+  return out
+end
+
+--- The tooltip lines of a merchant item, as text, from a hidden tooltip.
+local function frameLines(index)
+  local out = {}
   if not scanTip then
     scanTip = CreateFrame("GameTooltip", "PuggerWaylaidCompanionScanTip", nil, "GameTooltipTemplate")
   end
   scanTip:SetOwner(WorldFrame or UIParent, "ANCHOR_NONE")
+  scanTip:ClearLines()
   scanTip:SetMerchantItem(index)
   for i = 1, scanTip:NumLines() do
     local left = _G["PuggerWaylaidCompanionScanTipTextLeft" .. i]
     local text = left and left:GetText()
     if type(text) == "string" then out[#out + 1] = text end
   end
+  scanTip:Hide()
   return out
 end
 
@@ -47,11 +65,16 @@ local function standingNumber(name)
   end
 end
 
---- The reputation an item requires: faction name and standing number, or nil.
+--- The reputation an item requires: the faction's name (true for the merchant's own
+--- faction) and the standing number, or nil.
 local function required(index)
-  for _, text in ipairs(tooltipLines(index)) do
-    local faction, standing = text:match(REQUIRES)
-    if faction then return faction, standingNumber(standing) end
+  for _, read in ipairs({ dataLines, frameLines }) do
+    for _, text in ipairs(read(index)) do
+      local faction, standing = text:match(REQUIRES)
+      if faction then return faction, standingNumber(standing) end
+      standing = text:match(REQUIRES_OWN)
+      if standing then return true, standingNumber(standing) end
+    end
   end
 end
 
@@ -77,41 +100,155 @@ local function costs(index)
   return out
 end
 
-local function scan()
-  local rep = ns.Reputation()
-  if not rep or not ns.db or not GetMerchantNumItems then return end
+--- Whether an item's costs include Merchant's Favor, which only the trade factions take.
+local function paysFavor(list)
+  for _, c in ipairs(list) do
+    if type(c.name) == "string" and c.name:find("Favor") then return true end
+  end
+  return false
+end
+
+local GetItemInfo = (C_Item and C_Item.GetItemInfo) or GetItemInfo
+
+--- Ask the client for every shop item's data; true when some of it is still missing.
+local function requestItems()
+  local missing = false
+  for index = 1, (GetMerchantNumItems and GetMerchantNumItems()) or 0 do
+    local id = GetMerchantItemID and GetMerchantItemID(index)
+    if id and not (GetItemInfo and GetItemInfo(id)) then
+      missing = true
+      if C_Item and C_Item.RequestLoadItemDataByID then pcall(C_Item.RequestLoadItemDataByID, id) end
+    end
+  end
+  return missing
+end
+
+--- What the open shop holds: its items, and whether any requires the trade faction.
+local function read(rep, saved)
+  local old = {}
+  for _, item in ipairs(saved and saved.items or {}) do old[item.id] = item end
   local items, ours = {}, false
   for index = 1, GetMerchantNumItems() or 0 do
     local id = GetMerchantItemID and GetMerchantItemID(index)
     if id then
       local faction, standing = required(index)
-      if faction == rep.name then ours = true end
+      local paid = costs(index)
+      if faction == rep.name or paysFavor(paid) then ours = true end
+      -- A tooltip still loading has no requirement line: keep what an earlier visit saw.
+      if faction ~= rep.name and faction ~= true then standing = old[id] and old[id].standing end
       local name, icon, price, quantity = itemInfo(index)
       items[#items + 1] = {
         id = id, name = name, icon = icon, price = price or 0, quantity = quantity or 1,
-        standing = faction == rep.name and standing or nil, costs = costs(index),
+        standing = standing, costs = paid,
       }
     end
   end
-  if not ours then return end
+  return items, ours
+end
+
+--- The quartermasters' saved shops for a faction: { [npc] = shop }, created if needed.
+local function shops(faction)
   ns.db.rewards = ns.db.rewards or {}
-  ns.db.rewards[rep.name] = {
-    npc = UnitName and UnitName("npc"), time = time and time() or os.time(), items = items,
-  }
+  local list = ns.db.rewards[faction]
+  -- Before 0.5.1 a faction held a single shop.
+  if list and list.items then list = { [list.npc or "?"] = list } end
+  list = list or {}
+  ns.db.rewards[faction] = list
+  return list
+end
+
+--- A unit value the addon may read, or nil (newer clients hide some as secret).
+local function readable(v)
+  if v == nil then return nil end
+  if issecretvalue and issecretvalue(v) then return nil end
+  if canaccessvalue and not canaccessvalue(v) then return nil end
+  return v
+end
+
+--- The open shop's key in shops(): its NPC id, or its name.
+local function shopKey()
+  local guid = readable(UnitGUID and UnitGUID("npc"))
+  local id = type(guid) == "string" and tonumber((select(6, strsplit("-", guid))))
+  local name = readable(UnitName and UnitName("npc"))
+  return id or (type(name) == "string" and name) or "?"
+end
+
+local function scan()
+  local rep = ns.Reputation()
+  if not rep or not ns.db or not GetMerchantNumItems then return end
+  ns.db.shopDump = nil -- left by a test build of /pwc shop
+  local list, key = shops(rep.name), shopKey()
+  local items, ours = read(rep, list[key])
+  if not ours then return end
+  local npc = readable(UnitName and UnitName("npc"))
+  -- The same quartermaster saved under another key: by name, before 0.5.1.
+  for k, shop in pairs(list) do
+    if k ~= key and npc and shop.npc == npc then list[k] = nil end
+  end
+  list[key] = { npc = npc, time = time and time() or os.time(), items = items }
   ns.Changed()
 end
 
---- The rewards saved for the player's trade faction, or nil before its shop was seen.
+--- The quartermasters' shops saved for the player's trade faction ({ [npc] = shop }, nil
+--- before any was seen), and the player's standing.
 function ns.Rewards()
   local rep = ns.Reputation()
-  return rep and ns.db and ns.db.rewards and ns.db.rewards[rep.name], rep
+  if not (rep and ns.db) then return nil, rep end
+  local list = shops(rep.name)
+  return next(list) and list or nil, rep
+end
+
+--- Print what the open shop shows the rewards scan (/pwc shop).
+function ns.ShopReport()
+  local say = function(text) print(ns.TITLE .. ": " .. text) end
+  local rep = ns.Reputation()
+  if not rep then return say("trade faction unknown.") end
+  local count = GetMerchantNumItems and GetMerchantNumItems() or 0
+  if count == 0 then return say("open a shop first.") end
+  local ours, own, favor, others, loading, lines = 0, 0, 0, {}, 0, 0
+  for index = 1, count do
+    local id = GetMerchantItemID and GetMerchantItemID(index)
+    local faction = required(index)
+    if faction == rep.name then
+      ours = ours + 1
+    elseif faction == true then
+      own = own + 1
+    elseif faction then
+      others[faction] = true
+    end
+    if paysFavor(costs(index)) then favor = favor + 1 end
+    lines = lines + #dataLines(index) + #frameLines(index)
+    if id and not (GetItemInfo and GetItemInfo(id)) then loading = loading + 1 end
+  end
+  say(("%d items, %d require %s, %d require this merchant's faction, %d cost Merchant's Favor, %d still loading, %d tooltip lines read.")
+    :format(count, ours, rep.name, own, favor, loading, lines))
+  for faction in pairs(others) do say("also requires: " .. faction) end
+  local saved = shops(rep.name)[shopKey()]
+  say(saved and ("saved: %d items from %s."):format(#saved.items, saved.npc or "?") or "nothing saved for this merchant.")
+end
+
+local open, pending = false, false
+--- Scan shortly, once: the shop's items and their data come in bursts.
+local function scanSoon()
+  if pending then return end
+  pending = true
+  C_Timer.After(0.5, function()
+    pending = false
+    if not open then return end
+    requestItems()
+    scan()
+  end)
 end
 
 local events = CreateFrame("Frame")
-for _, event in ipairs({ "MERCHANT_SHOW", "MERCHANT_UPDATE" }) do
+for _, event in ipairs({ "MERCHANT_SHOW", "MERCHANT_UPDATE", "MERCHANT_CLOSED", "GET_ITEM_INFO_RECEIVED" }) do
   pcall(events.RegisterEvent, events, event)
 end
-events:SetScript("OnEvent", function()
-  -- The shop's items fill in a moment after it opens.
-  C_Timer.After(0.5, scan)
+events:SetScript("OnEvent", function(_, event)
+  if event == "MERCHANT_CLOSED" then
+    open = false
+    return
+  end
+  if event == "MERCHANT_SHOW" then open = true end
+  if open then scanSoon() end
 end)
