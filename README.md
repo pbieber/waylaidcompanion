@@ -10,7 +10,7 @@ Open the window with `/pwc`, the minimap button or the addon compartment.
 - **Craftsman's Writs**: every writ for your side, by tier, profession or cost: material, rep, cost per 100 rep, owned, zone of the turn-in, today. Click a row: map (or, at the auction house, buy).
 - **Waylaid Crates**: every crate and its material, owned, and the Merchant's Favor it pays.
 - **Turn-ins**: every turn-in, by continent. Also marked on the world map.
-- **Rewards**: what your faction's quartermasters sell, one list per quartermaster (each profession has its own), by standing, with its cost and whether you can buy it. Learned the first time you open each quartermaster's shop.
+- **Rewards**: what your faction's quartermasters sell, one list per profession, each with its own quartermaster, by standing, with its cost and whether you can buy it. Learned the first time you open each quartermaster's shop.
 - **Transfer**: mail, bank and buying for writs (below).
 
 Click a group header to fold it.

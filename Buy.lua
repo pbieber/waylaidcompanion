@@ -29,6 +29,10 @@ local CAN = AH ~= nil and AH.SendSearchQuery ~= nil and AH.MakeItemKey ~= nil
   and AH.StartCommoditiesPurchase ~= nil and AH.PlaceBid ~= nil
 local TIMEOUT = 8       -- seconds to wait for the auction house before giving up
 local PAY_TIMEOUT = 20  -- seconds to wait for a purchase to be confirmed
+-- Seconds to wait, after the auction house reports an error while paying, for the
+-- purchase to be confirmed anyway: WoW Forever reports error 10 for purchases that go
+-- through.
+local ERROR_GRACE = 4
 local ADDON = ...
 local GetItemInfo = (C_Item and C_Item.GetItemInfo) or GetItemInfo
 local RED, GREY = "ffff4040", "ff808080"
@@ -360,7 +364,7 @@ end
 --- rest of the first search can't be bought any more ("item not found").
 local function payAuction(s, a)
   s.auction, s.note = a, nil
-  buy.state, buy.waited, buy.seen = "paying", 0, {}
+  buy.state, buy.waited, buy.seen, buy.error = "paying", 0, {}, nil
   -- The purchase first, the window after: nothing runs between the click and the
   -- protected call.
   C_AuctionHouse.PlaceBid(a.auctionID, a.each)
@@ -389,7 +393,7 @@ local function onBuy()
       show({ status = "Getting the price...", qty = s.qty })
     end
   elseif state == "confirm" then
-    buy.state, buy.waited, buy.holding, buy.seen = "paying", 0, false, {}
+    buy.state, buy.waited, buy.holding, buy.seen, buy.error = "paying", 0, false, {}, nil
     C_AuctionHouse.ConfirmCommoditiesPurchase(s.id, s.qty)
     if buy and buy.state == "paying" then
       show({ pay = s.total, qty = s.qty, notes = { ns.Color(GREY, "Buying...") } })
@@ -401,6 +405,15 @@ local function onBuy()
   elseif state == "next" then
     payAuction(s, s.nextAuction)
   end
+end
+
+--- An auction house error code as text: "AH error 10 (DatabaseError)."
+local function errorText(code)
+  local name
+  for k, v in pairs(Enum and Enum.AuctionHouseError or {}) do
+    if v == code then name = k end
+  end
+  return ("AH error %s%s."):format(tostring(code), name and (" (" .. name .. ")") or "")
 end
 
 --- Fail with a reason; the events seen while waiting go along, in grey, so a report from
@@ -516,7 +529,12 @@ events:SetScript("OnEvent", function(_, event, ...)
       s.note = ns.Color(RED, "Sold. Next cheapest:")
       return search()
     end
-    failed(("AH error %s."):format(tostring(code)))
+    if buy.state == "paying" then
+      -- It may still go through: wait a moment for the confirmation (see the driver).
+      if not buy.error then buy.error = { code = code, at = buy.waited } end
+      return
+    end
+    failed(errorText(code))
   elseif event == "COMMODITY_PRICE_UPDATED" and buy.state == "quote" then
     local unit, total = ...
     s.total, buy.state = total, "confirm"
@@ -530,7 +548,7 @@ events:SetScript("OnEvent", function(_, event, ...)
   elseif event == "COMMODITY_PURCHASE_SUCCEEDED" and buy.state == "paying" then
     bought(s.qty)
   elseif event == "COMMODITY_PURCHASE_FAILED" and buy.state == "paying" then
-    failed("Purchase failed.")
+    failed(buy.error and errorText(buy.error.code) or "Purchase failed.")
   elseif event == "AUCTION_HOUSE_PURCHASE_COMPLETED" and s.kind == "item" and s.auction
     and (buy.state == "paying" or (buy.state == "failed" and buy.late)) then
     -- A late answer still counts: the purchase went through.
@@ -583,6 +601,10 @@ driver:SetScript("OnUpdate", function(_, elapsed)
     end
   elseif buy.state == "quote" and buy.waited > TIMEOUT then
     failed("No price answer.")
+  elseif buy.state == "paying" and buy.error and buy.waited - buy.error.at > ERROR_GRACE then
+    -- An error and no confirmation since. A confirmation that still comes counts.
+    failed(errorText(buy.error.code))
+    buy.late = true
   elseif buy.state == "paying" and buy.waited > PAY_TIMEOUT then
     -- It may or may not have gone through: say so rather than buy twice. A late
     -- confirmation still counts.

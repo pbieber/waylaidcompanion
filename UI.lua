@@ -636,6 +636,40 @@ local function rewardCost(item)
   return #parts > 0 and table.concat(parts, ", ") or ns.Color(GREY, "Free")
 end
 
+-- Recipes are item class 9; their subclass is the profession. Icons by subclass.
+local RECIPE_CLASS = 9
+local PROFESSION_ICON = {
+  [1] = "Interface/Icons/Trade_LeatherWorking", [2] = "Interface/Icons/Trade_Tailoring",
+  [3] = "Interface/Icons/Trade_Engineering", [4] = "Interface/Icons/Trade_BlackSmithing",
+  [5] = "Interface/Icons/INV_Misc_Food_15", [6] = "Interface/Icons/Trade_Alchemy",
+  [7] = "Interface/Icons/Spell_Holy_SealOfSacrifice", [8] = "Interface/Icons/Trade_Engraving",
+  [9] = "Interface/Icons/Trade_Fishing", [10] = "Interface/Icons/INV_Misc_Gem_01",
+}
+-- The names, for a client that gives none (the game's own are in the player's language).
+local PROFESSION_NAME = {
+  "Leatherworking", "Tailoring", "Engineering", "Blacksmithing", "Cooking", "Alchemy",
+  "First Aid", "Enchanting", "Fishing", "Jewelcrafting",
+}
+local GetItemInfoInstant = (C_Item and C_Item.GetItemInfoInstant) or GetItemInfoInstant
+
+--- The profession a quartermaster's shop is for: its name and icon, going by the recipes
+--- it sells (the game knows an item's kind without asking the server). nil for a shop
+--- with no recipes.
+local function shopProfession(shop)
+  if not GetItemInfoInstant then return nil end
+  local count, name, best = {}, {}, nil
+  for _, item in ipairs(shop.items) do
+    local _, _, subType, _, _, class, subclass = GetItemInfoInstant(item.id)
+    if class == RECIPE_CLASS and subclass and PROFESSION_ICON[subclass] then
+      count[subclass] = (count[subclass] or 0) + 1
+      name[subclass] = subType
+      if not best or count[subclass] > count[best] then best = subclass end
+    end
+  end
+  if not best then return nil end
+  return name[best] or PROFESSION_NAME[best], PROFESSION_ICON[best]
+end
+
 pages.rewards = {
   title = "Rewards",
   build = function()
@@ -645,14 +679,25 @@ pages.rewards = {
     if not saved then
       return {}, REWARD_COLUMNS, "Not seen yet. Open each quartermaster's shop once.", headings
     end
-    -- One group per quartermaster, by name; its items by standing, then name.
+    -- One group per quartermaster, under its profession (by the NPC's name when it sells
+    -- no recipes, after the professions); its items by standing, then name.
     local shops = {}
-    for key, shop in pairs(saved) do shops[#shops + 1] = { key = key, shop = shop } end
-    table.sort(shops, function(a, b) return (a.shop.npc or "") < (b.shop.npc or "") end)
+    for key, shop in pairs(saved) do
+      local profession, icon = shopProfession(shop)
+      shops[#shops + 1] = { key = key, shop = shop, profession = profession, icon = icon }
+    end
+    table.sort(shops, function(a, b)
+      if (a.profession == nil) ~= (b.profession == nil) then return a.profession ~= nil end
+      local x, y = a.profession or a.shop.npc or "", b.profession or b.shop.npc or ""
+      if x ~= y then return x < y end
+      return (a.shop.npc or "") < (b.shop.npc or "")
+    end)
     local entries = {}
     for _, s in ipairs(shops) do
+      local title = s.profession and ("|T%s:16:16|t %s"):format(s.icon, s.profession)
+        or (s.shop.npc or "Quartermaster")
       local header, folded = groupHeader("rewards", "npc", s.key,
-        ("%s (%d)"):format(s.shop.npc or "Quartermaster", #s.shop.items))
+        ("%s (%d)"):format(title, #s.shop.items))
       entries[#entries + 1] = header
       if not folded then
         local items = {}
