@@ -8,7 +8,7 @@ Open the window with `/pwc`, the minimap button or the addon compartment.
 
 - **Overview**: your standing, the turn-ins to the next standing and to Exalted, and what is open today.
 - **Craftsman's Writs**: every writ for your side, by tier, profession or cost: material, rep, cost (per 100 rep by default), owned, zone of the turn-in, today. Click a row: map (or, at the auction house, buy).
-- **Waylaid Crates**: every crate, by tier, profession or cost: the Merchant's Favor it pays, its cost with its cheapest material (per favor by default, at the least the crate pays), owned. Each material under a crate shows the crate's cost filled with that one, and the cheapest is ticked. Expert and Artisan crates' favor is an estimate (twice the tier below, shown with ~) until one is turned in.
+- **Waylaid Crates**: every crate, by tier, profession or cost: the Merchant's Favor it pays (white / green), its cost with its cheapest material (per favor by default, at the least the crate pays), owned. Each material under a crate shows the crate's cost filled with that one, and the cheapest is ticked. The favor is listed for each quality of filled crate, white then green (a green crate pays twice a white one of the same name).
 - **Turn-ins**: every turn-in, by continent. Also marked on the world map.
 - **Rewards**: what your faction's quartermasters sell, one list per profession, each with its own quartermaster, by standing, with its cost and whether you can buy it. Learned the first time you open each quartermaster's shop.
 - **Transfer**: mail, bank and buying for writs (below).
@@ -35,7 +35,7 @@ The shipped data does not have a turn-in for every writ. The addon learns the re
 
 ## Sharing what you've learned
 
-Type `/pwc export` to get a string of what the addon has learned on your account: the turn-ins, the writs the data wrongly limits to one side, the Merchant's Favor crates paid, and what each quartermaster sells. It holds nothing about your characters, bags, mail or gold. Press Ctrl+C to copy it, then post it as an issue on the [addon's GitHub page](https://github.com/pbieber/waylaidcompanion/issues) (attach it as a .txt file if it is long), and it goes into the next release for everyone. You can also give it to another player directly.
+Type `/pwc export` to get a string of what the addon has learned on your account: the turn-ins, the writs the data wrongly limits to one side, and what each quartermaster sells. It holds nothing about your characters, bags, mail or gold. Press Ctrl+C to copy it, then post it as an issue on the [addon's GitHub page](https://github.com/pbieber/waylaidcompanion/issues) (attach it as a .txt file if it is long), and it goes into the next release for everyone. You can also give it to another player directly.
 
 To add a string someone shared, type `/pwc import`, paste it with Ctrl+V and press **Import**. Only what your account doesn't know yet is added: a turn-in you or the addon already know stays, and a quartermaster's list is replaced only by a newer one. Importing the same string twice changes nothing.
 
@@ -90,7 +90,7 @@ The addon's files are at the root of this repository, so the folder has to be na
 
 Both need Python; the first also needs `lupa` (`pip install lupa`).
 
-- `python scripts/bake_waylaid.py` reads each account's saved `PuggerWaylaidCompanion.lua` (read-only) and the strings players shared, and writes the turn-ins, writs for both sides, Merchant's Favor and quartermasters' rewards into `Data/Recorded.lua`. Save shared strings as `.txt` files in `shares/` (several per file and line breaks are fine), or name files on the command line. `--dry-run` reports without writing; `--no-saved` leaves out this computer's saved data; `--wow` sets the game's folder.
+- `python scripts/bake_waylaid.py` reads each account's saved `PuggerWaylaidCompanion.lua` (read-only) and the strings players shared, and writes the turn-ins, writs for both sides and quartermasters' rewards into `Data/Recorded.lua`. Save shared strings as `.txt` files in `shares/` (several per file and line breaks are fine), or name files on the command line. `--dry-run` reports without writing; `--no-saved` leaves out this computer's saved data; `--wow` sets the game's folder.
 - `python scripts/release.py` builds `dist/PuggerWaylaidCompanion-<version>.zip`, the file to upload to CurseForge. Give it a version, as in `python scripts/release.py 0.4.0`, to write that into the toc first.
 
 ## License

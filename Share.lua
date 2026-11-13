@@ -2,8 +2,8 @@
 Sharing what the addon has learned, as text a player copies out and another pastes in.
 
 /pwc export shows a string holding this account's turn-in places, the writs it has had on
-the side the data says can't get them, the Merchant's Favor crates paid and the
-quartermasters' rewards; nothing about its characters. /pwc import
+the side the data says can't get them and the quartermasters' rewards; nothing about
+its characters. /pwc import
 takes such a string and adds what this account does not know yet. scripts/bake_waylaid.py
 reads the same strings (it loads this file) to bake them into Data/Recorded.lua.
 
@@ -18,7 +18,7 @@ small serialization of one table:
         | "Y" | "F"                   true, false
 
   { v = 1, npcs = { [place] = { name, uiMapID, x, y, zone } }, writs = { [quest] = place },
-    anySide = { [quest] = true }, favor = { [crate key] = { [amount] = times seen } },
+    anySide = { [quest] = true },
     rewards = { [faction] = { [npc] = { npc, time, items = { { id, standing (0 for none),
     price, quantity, cost value, cost name, cost value, cost name, ... } } } } } }
 
@@ -252,7 +252,7 @@ end
 
 --- The shared data in a decoded table, in the shapes above; anything else is dropped.
 local function clean(data)
-  local out = { npcs = {}, writs = {}, anySide = {}, favor = {}, rewards = {} }
+  local out = { npcs = {}, writs = {}, anySide = {}, rewards = {} }
   if type(data) ~= "table" or data.v ~= 1 then return nil end
   for k, p in pairs(type(data.npcs) == "table" and data.npcs or {}) do
     if placeKey(k) then out.npcs[k] = place(p) end
@@ -262,15 +262,6 @@ local function clean(data)
   end
   for quest, yes in pairs(type(data.anySide) == "table" and data.anySide or {}) do
     if int(quest, 1) and yes == true then out.anySide[quest] = true end
-  end
-  for key, paid in pairs(type(data.favor) == "table" and data.favor or {}) do
-    if (int(key, 1) or (type(key) == "string" and key:match("^q%d+$"))) and type(paid) == "table" then
-      local amounts = {}
-      for amount, times in pairs(paid) do
-        if int(amount, 1, 100000) and int(times, 1) then amounts[amount] = times end
-      end
-      if next(amounts) then out.favor[key] = amounts end
-    end
   end
   for faction, shops in pairs(type(data.rewards) == "table" and data.rewards or {}) do
     if text(faction) and type(shops) == "table" then
@@ -284,7 +275,7 @@ local function clean(data)
   return out
 end
 
---- The data in a shared string: { npcs, writs, anySide, favor, rewards }, or nil and why
+--- The data in a shared string: { npcs, writs, anySide, rewards }, or nil and why
 --- not.
 function ns.ShareDecode(str)
   if type(str) ~= "string" then return nil, "no text" end
@@ -318,8 +309,7 @@ function ns.ShareEncode()
     end
   end
   local out = {}
-  write({ v = 1, npcs = db.npcs, writs = db.writNpc, anySide = db.anySide, favor = db.favor,
-    rewards = rewards }, out)
+  write({ v = 1, npcs = db.npcs, writs = db.writNpc, anySide = db.anySide, rewards = rewards }, out)
   local bytes = table.concat(out)
   return PREFIX .. ":" .. adler32(bytes) .. ":" .. toBase64(bytes) .. "."
 end
@@ -329,10 +319,10 @@ end
 -- ---------------------------------------------------------------------------
 
 --- Add what a shared string knows and this account does not. Returns counts:
---- { turnIns, sides, favor, shops }.
+--- { turnIns, sides, shops }.
 function ns.ShareMerge(data)
   local db = ns.db
-  local added = { turnIns = 0, sides = 0, favor = 0, shops = 0 }
+  local added = { turnIns = 0, sides = 0, shops = 0 }
   for quest, at in pairs(data.writs) do
     local writ = ns.writByQuest[quest]
     local old = db.writNpc[quest]
@@ -351,17 +341,6 @@ function ns.ShareMerge(data)
     if writ and writ.side and not ns.AnySide(quest) then
       db.anySide[quest] = true
       added.sides = added.sides + 1
-    end
-  end
-  for key, paid in pairs(data.favor) do
-    local kept = db.favor[key] or {}
-    db.favor[key] = kept
-    for amount, times in pairs(paid) do
-      -- The larger count, not the sum: importing the same string twice changes nothing.
-      if times > (kept[amount] or 0) then
-        if not kept[amount] then added.favor = added.favor + 1 end
-        kept[amount] = times
-      end
     end
   end
   db.rewards = db.rewards or {}
@@ -436,9 +415,8 @@ local function makeWindow()
     end
     local added = ns.ShareMerge(data)
     local function n(count, word) return ("%d %s%s"):format(count, word, count == 1 and "" or "s") end
-    print(("%s: imported %s, %s, %s, %s."):format(ns.TITLE, n(added.turnIns, "turn-in"),
-      n(added.sides, "writ") .. " for both sides",
-      n(added.favor, "Merchant's Favor amount"), n(added.shops, "quartermaster")))
+    print(("%s: imported %s, %s, %s."):format(ns.TITLE, n(added.turnIns, "turn-in"),
+      n(added.sides, "writ") .. " for both sides", n(added.shops, "quartermaster")))
     ns.Changed()
     window:Hide()
   end)
