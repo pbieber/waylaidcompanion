@@ -33,6 +33,7 @@ function ns.BuildOptions(parent, width)
     local h = f:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
     h:SetPoint("TOPLEFT", 10, top)
     h:SetText(text)
+    h:SetTextColor(1, 1, 1)
   end
   local function note(text, top)
     local n = f:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
@@ -42,8 +43,8 @@ function ns.BuildOptions(parent, width)
     n:SetText(text)
   end
 
-  --- A row of buttons, one per choice, for a saved setting; the chosen one is pressed in
-  --- (disabled), the way the sort buttons show theirs. `choices` are { value, text },
+  --- A row of tabs, one per choice, for a saved setting; the chosen one is underlined,
+  --- the way the sort tabs show theirs. `choices` are { value, text },
   --- text a string or a function giving one.
   local function choice(label, top, key, choices)
     local text = f:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
@@ -51,8 +52,7 @@ function ns.BuildOptions(parent, width)
     text:SetText(label)
     local buttons = {}
     for i, c in ipairs(choices) do
-      local b = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
-      b:SetSize(BUTTON_W, 22)
+      local b = ns.Skin.Tab(f, BUTTON_W, 22)
       b:SetPoint("TOPLEFT", 10 + LABEL_W + (i - 1) * (BUTTON_W + 4), top)
       b:SetScript("OnClick", function()
         ns.db[key] = c[1]
@@ -65,7 +65,7 @@ function ns.BuildOptions(parent, width)
         for i, c in ipairs(choices) do
           local b = buttons[i]
           b:SetText(type(c[2]) == "function" and c[2]() or c[2])
-          b:SetEnabled(ns.db[key] ~= c[1])
+          b:SetActive(ns.db[key] == c[1])
         end
       end,
     }

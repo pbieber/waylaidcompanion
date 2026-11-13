@@ -68,6 +68,7 @@ function ns.BuildOverview(parent, width)
 
   f.faction = f:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
   f.faction:SetPoint("TOPLEFT", 10, -4)
+  f.faction:SetTextColor(1, 1, 1)
   f.standing = f:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
   f.standing:SetPoint("TOPRIGHT", f, "TOPLEFT", 10 + barWidth, -7)
 
@@ -76,10 +77,11 @@ function ns.BuildOverview(parent, width)
   trough:SetColorTexture(0, 0, 0, 0.7)
   trough:SetPoint("TOPLEFT", 8, -28)
   trough:SetSize(barWidth + 4, 22)
+  ns.Skin.Border(f, ns.Skin.color.line, "BORDER", trough)
   local bar = CreateFrame("StatusBar", nil, f)
   bar:SetPoint("TOPLEFT", 10, -30)
   bar:SetSize(barWidth, 18)
-  bar:SetStatusBarTexture("Interface/TargetingFrame/UI-StatusBar")
+  bar:SetStatusBarTexture(ns.Skin.BAR)
   bar:SetMinMaxValues(0, 1)
   for i = 1, SEGMENTS - 1 do
     local tick = bar:CreateTexture(nil, "OVERLAY")
@@ -97,12 +99,20 @@ function ns.BuildOverview(parent, width)
   f.toExalted:SetPoint("TOPRIGHT", f, "TOPLEFT", 10 + barWidth, -54)
 
   local function heading(text, top)
-    local h = f:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    local h = f:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
     h:SetPoint("TOPLEFT", 10, top)
     h:SetText(text)
     return h
   end
+  --- A card behind a block of the page, from `top` down to `bottom`.
+  local function card(top, bottom)
+    local back = ns.Skin.Fill(f, ns.Skin.color.card, "BACKGROUND", -1)
+    back:SetPoint("TOPLEFT", 0, top)
+    back:SetPoint("BOTTOMRIGHT", f, "TOPRIGHT", 0, bottom)
+    ns.Skin.Border(f, ns.Skin.color.line, "BORDER", back)
+  end
 
+  card(-80, -106 - (1 + #ns.WRIT_TIERS) * ROW - 24)
   heading("Turn-ins needed", -88)
   f.needed = makeGrid(f, -106, 1 + #ns.WRIT_TIERS)
   f.neededNote = f:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
@@ -110,6 +120,7 @@ function ns.BuildOverview(parent, width)
   f.neededNote:SetText("If all of one tier.")
 
   local todayTop = -106 - (1 + #ns.WRIT_TIERS) * ROW - 44
+  card(todayTop + 8, todayTop - 44 - (2 + #ns.WRIT_TIERS) * ROW - 6)
   heading("Today", todayTop)
   f.todayLine = f:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
   f.todayLine:SetPoint("TOPLEFT", 10, todayTop - 20)

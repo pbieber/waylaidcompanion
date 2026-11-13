@@ -18,8 +18,9 @@ if not CreateFrame then return end
 
 local GetItemInfo = (C_Item and C_Item.GetItemInfo) or GetItemInfo
 
+local Skin = ns.Skin
 local WIDTH, HEIGHT, MENU = 920, 560, 170
-local ROW, CELLS, HEAD = 20, 7, 18
+local ROW, CELLS, HEAD = 22, 7, 20
 local GREY, GOLD, GREEN, ORANGE = "ff808080", "ffffd100", "ff40d040", "ffff8040"
 
 local window, list, sortBar, note, scanBar
@@ -68,6 +69,15 @@ local function makeRow(parent)
   row.stripe:SetAllPoints()
   row.icon = row:CreateTexture(nil, "ARTWORK")
   row.icon:SetSize(ROW - 4, ROW - 4)
+  row.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)  -- without the icon's own border
+  -- A group header's colour bar on its left, and its fold arrow.
+  row.bar = row:CreateTexture(nil, "BORDER")
+  row.bar:SetPoint("TOPLEFT")
+  row.bar:SetPoint("BOTTOMLEFT")
+  row.bar:SetWidth(3)
+  row.arrow = row:CreateTexture(nil, "ARTWORK")
+  row.arrow:SetTexture("Interface/ChatFrame/ChatFrameExpandArrow")
+  row.arrow:SetSize(12, 12)
   row.cells = {}
   for i = 1, CELLS do
     local text = row:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
@@ -79,7 +89,9 @@ local function makeRow(parent)
   row.right = row:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
   row.right:SetJustifyH("RIGHT")
   row.right:SetWordWrap(false)
-  row:SetHighlightTexture("Interface/QuestFrame/UI-QuestTitleHighlight", "ADD")
+  row.right:SetTextColor(Skin.color.dim[1], Skin.color.dim[2], Skin.color.dim[3])
+  local hover = Skin.Fill(row, Skin.color.hover, "HIGHLIGHT")
+  hover:SetAllPoints()
   row:SetScript("OnEnter", showTooltip)
   row:SetScript("OnLeave", function() GameTooltip:Hide() end)
   row:SetScript("OnClick", function(self)
@@ -129,12 +141,17 @@ local function makeList(parent)
   l.head:SetHeight(HEAD)
   local shade = l.head:CreateTexture(nil, "BACKGROUND")
   shade:SetAllPoints()
-  shade:SetColorTexture(0, 0, 0, 0.4)
+  shade:SetColorTexture(0, 0, 0, 0.3)
+  local under = Skin.Fill(l.head, Skin.color.line, "BORDER")
+  under:SetPoint("BOTTOMLEFT")
+  under:SetPoint("BOTTOMRIGHT")
+  under:SetHeight(1)
   l.head.cells = {}
   for i = 1, CELLS do
     local cell = CreateFrame("Button", nil, l.head)
     cell:SetHeight(HEAD)
-    cell.text = cell:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+    cell.text = cell:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    cell.text:SetTextColor(Skin.color.dim[1], Skin.color.dim[2], Skin.color.dim[3])
     cell.text:SetAllPoints()
     cell.text:SetJustifyH("LEFT")
     cell.text:SetWordWrap(false)
@@ -200,14 +217,29 @@ local function makeList(parent)
       row:SetPoint("TOPLEFT", 0, -(i - 1) * ROW)
       local indent = entry.indent or 0
       if entry.header then
-        row.stripe:SetColorTexture(1, 0.82, 0, 0.12)
+        -- A dark band with a bar in the group's colour (the accent without one), a fold
+        -- arrow when it folds, and the quiet part of the title in grey.
+        row.stripe:SetColorTexture(unpack(Skin.color.band))
+        local r, g, b = Skin.RGB(entry.color or Skin.ACCENT_HEX)
+        row.bar:SetColorTexture(r, g, b, 1)
+        row.bar:Show()
+        local left = 12 + indent
+        if entry.folded ~= nil then
+          row.arrow:ClearAllPoints()
+          row.arrow:SetPoint("LEFT", 10 + indent, 0)
+          row.arrow:SetRotation(entry.folded and 0 or -math.pi / 2)
+          row.arrow:Show()
+          left = left + 14
+        else
+          row.arrow:Hide()
+        end
         row.icon:Hide()
         local rightWidth = entry.right and 220 or 0
         row.cells[1]:ClearAllPoints()
-        row.cells[1]:SetPoint("LEFT", 6, 0)
-        row.cells[1]:SetWidth(width - 12 - rightWidth)
-        row.cells[1]:SetFontObject("GameFontNormal")
-        row.cells[1]:SetText(entry.header)
+        row.cells[1]:SetPoint("LEFT", left, 0)
+        row.cells[1]:SetWidth(width - left - 6 - rightWidth)
+        row.cells[1]:SetFontObject("GameFontHighlight")
+        row.cells[1]:SetText(entry.sub and (entry.header .. "  " .. ns.Color(GREY, entry.sub)) or entry.header)
         for c = 2, CELLS do row.cells[c]:SetText("") end
         row.right:ClearAllPoints()
         row.right:SetPoint("RIGHT", entry.portrait and -(ROW + 8) or -6, 0)
@@ -215,7 +247,9 @@ local function makeList(parent)
         row.right:SetText(entry.right or "")
         setPortrait(row, entry.portrait)
       else
-        row.stripe:SetColorTexture(1, 1, 1, i % 2 == 0 and 0.04 or 0)
+        row.stripe:SetColorTexture(1, 1, 1, i % 2 == 0 and 0.03 or 0)
+        row.bar:Hide()
+        row.arrow:Hide()
         row.right:SetText("")
         setPortrait(row, nil)
         if entry.icon then
@@ -397,19 +431,20 @@ local function itemColored(id, tierHex, text)
   return tierHex and ns.Color(tierHex, text) or text
 end
 
-local FOLDED = "|TInterface/Buttons/UI-PlusButton-Up:14:14|t "
-local UNFOLDED = "|TInterface/Buttons/UI-MinusButton-Up:14:14|t "
-
 --- A group's header row, which folds the group away or opens it again on a click, and
 --- whether the group is folded. Remembered per page, sort and group; a group that starts
---- folded stays so until opened.
-local function groupHeader(page, sort, group, text, startFolded)
+--- folded stays so until opened. `color` is the bar on its left (the accent without
+--- one); `sub` follows the title in grey.
+local function groupHeader(page, sort, group, text, startFolded, color, sub)
   local key = ("%s:%s:%s"):format(page, sort, tostring(group))
   local stored = ns.db.collapsed[key]
   local folded
   if stored == nil then folded = startFolded == true else folded = stored == true end
   return {
-    header = (folded and FOLDED or UNFOLDED) .. text,
+    header = text,
+    color = color,
+    sub = sub,
+    folded = folded,
     click = function()
       if startFolded then
         ns.db.collapsed[key] = not folded
@@ -544,7 +579,8 @@ pages.writs = {
       if a.skill ~= b.skill then return a.skill < b.skill end
       return a.name < b.name
     end)
-    local entries, last, folded = {}, nil, false
+    local entries, last, folded, head = {}, nil, false, nil
+    local total, done = 0, 0
     for _, writ in ipairs(sorted) do
       local group
       if sort == "cost" then
@@ -556,16 +592,22 @@ pages.writs = {
       end
       if group ~= last then
         last = group
-        local header
         if sort == "cost" then
-          header = COST_HEADERS[group]
+          head, folded = groupHeader("writs", sort, group, COST_HEADERS[group])
         elseif sort == "profession" then
-          header = withIcon(PROFESSION_HEADER_ICON[writ.profession], writ.profession)
+          head, folded = groupHeader("writs", sort, group,
+            withIcon(PROFESSION_HEADER_ICON[writ.profession], writ.profession))
         else
-          header = ("%s  +%d rep each"):format(ns.WRIT_TIERS[writ.tier], ns.WRIT_REP[writ.tier])
+          head, folded = groupHeader("writs", sort, group, ns.WRIT_TIERS[writ.tier], nil,
+            ns.WRIT_COLOR[writ.tier], ("+%d rep each"):format(ns.WRIT_REP[writ.tier]))
         end
-        entries[#entries + 1], folded = groupHeader("writs", sort, group, header)
+        entries[#entries + 1] = head
+        total, done = 0, 0
       end
+      -- The header counts its group, folded or not.
+      total = total + 1
+      if ns.WritState(writ) == "done" then done = done + 1 end
+      head.right = ("%d / %d done"):format(done, total)
       if not folded then entries[#entries + 1] = writEntry(writ, sort, costs[writ]) end
     end
     local headings = {
@@ -745,16 +787,15 @@ pages.crates = {
       end
       if group ~= last then
         last = group
-        local header
         if byCost then
-          header = CRATE_COST_HEADERS[group]
+          entries[#entries + 1], folded = groupHeader("crates", sort, group, CRATE_COST_HEADERS[group])
         elseif sort == "profession" then
-          header = withIcon(CRATE_HEADER_ICON[crate.kind],
-            ("%s  (%s)"):format(crate.kind, ns.CRATE_SKILL[crate.kind]))
+          entries[#entries + 1], folded = groupHeader("crates", sort, group,
+            withIcon(CRATE_HEADER_ICON[crate.kind], crate.kind), nil, nil, ns.CRATE_SKILL[crate.kind])
         else
-          header = ("%s  Level %d"):format(ns.CRATE_TIERS[crate.tier], ns.CRATE_LEVEL[crate.tier])
+          entries[#entries + 1], folded = groupHeader("crates", sort, group, ns.CRATE_TIERS[crate.tier],
+            nil, ns.CRATE_COLOR[crate.tier], "Level " .. ns.CRATE_LEVEL[crate.tier])
         end
-        entries[#entries + 1], folded = groupHeader("crates", sort, group, header)
       end
       if not folded then
         local _, icon = ns.Item(crate.item)
@@ -1047,8 +1088,8 @@ pages.rewards = {
     local entries = {}
     for _, s in ipairs(shops) do
       local title = ("|T%s:16:16|t %s"):format(s.icon or MISC_ICON, s.profession or "Misc")
-      local header, folded = groupHeader("rewards", "npc", s.key,
-        ("%s (%d)"):format(title, #s.shop.items))
+      local header, folded = groupHeader("rewards", "npc", s.key, title, nil, nil,
+        ("(%d)"):format(#s.shop.items))
       -- The quartermaster on the right, a shop without recipes ("Misc") too.
       header.right = s.shop.npc
       header.portrait = type(s.key) == "number" and s.key or nil
@@ -1091,7 +1132,8 @@ pages.rewards = {
         for _, item in ipairs(forFavor) do add(item) end
         if #other > 0 then
           local sub, subFolded = groupHeader("rewards", "other", s.key,
-            ("    Not for Merchant's Favor (%d)"):format(#other), true)
+            "Not for Merchant's Favor", true, GREY, ("(%d)"):format(#other))
+          sub.indent = 16
           entries[#entries + 1] = sub
           if not subFolded then
             for _, item in ipairs(other) do add(item) end
@@ -1111,6 +1153,15 @@ pages.options = { title = "Options", panel = "options" }
 
 -- The pages down the menu; Options sits apart at its foot.
 local MENU_ORDER = { "overview", "writs", "crates", "turnins", "rewards", "transfer", "options" }
+local MENU_ICON = {
+  overview = "Interface/Icons/INV_Misc_Book_09",
+  writs = "Interface/Icons/INV_Scroll_03",
+  crates = "Interface/Icons/INV_Crate_01",
+  turnins = "Interface/Icons/INV_Misc_Map_01",
+  rewards = "Interface/Icons/INV_Misc_Coin_01",
+  transfer = "Interface/Icons/INV_Letter_15",
+  options = "Interface/Icons/INV_Misc_Gear_01",
+}
 
 -- ---------------------------------------------------------------------------
 -- The window
@@ -1145,7 +1196,7 @@ local function updateScanBar()
     button:Enable()
     bar:SetMinMaxValues(0, math.max(1, p.total))
     bar:SetValue(p.done)
-    bar:SetStatusBarColor(0.1, 0.6, 0.1)
+    bar:SetStatusBarColor(0.2, 0.55, 0.25)
     bar.text:SetText(("%d / %d  %s"):format(p.done, p.total, p.item or ""))
     return
   end
@@ -1154,7 +1205,7 @@ local function updateScanBar()
   local lastScan = ns.LastScanTime()
   bar:SetMinMaxValues(0, 1)
   bar:SetValue(lastScan and 1 or 0)
-  bar:SetStatusBarColor(0.35, 0.35, 0.35)
+  bar:SetStatusBarColor(0.22, 0.22, 0.25)
   local text
   if not ns.CanScan() then
     text = "No AH search on this client."
@@ -1173,7 +1224,7 @@ function refresh()
   local page = pages[key] or pages.overview
   window.heading:SetText(page.title)
   for id, button in pairs(window.menu) do
-    if id == key then button:LockHighlight() else button:UnlockHighlight() end
+    button:SetSelected(id == key)
   end
 
   for name, panel in pairs(panels) do
@@ -1210,7 +1261,7 @@ function refresh()
       if sort then
         button.value = sort[1]
         button:SetText(sort[2])
-        button:SetEnabled(current ~= sort[1])
+        button:SetActive(current == sort[1])
         button:ClearAllPoints()
         button:SetPoint("RIGHT", sortBar, "RIGHT", -(#page.sorts - i) * 104, 0)
         button:Show()
@@ -1225,8 +1276,8 @@ function refresh()
 end
 
 local function build()
-  window = CreateFrame("Frame", "PuggerWaylaidCompanionWindow", UIParent, "BasicFrameTemplateWithInset")
-  window:SetSize(WIDTH, HEIGHT)
+  window = Skin.Window("PuggerWaylaidCompanionWindow", UIParent, WIDTH, HEIGHT,
+    (ns.TITLE:gsub("^Pugger", ns.Color(Skin.ACCENT_HEX, "Pugger"))))
   window:SetPoint("CENTER")
   window:SetFrameStrata("HIGH")
   window:SetMovable(true)
@@ -1238,21 +1289,58 @@ local function build()
   window:Hide()
   tinsert(UISpecialFrames, "PuggerWaylaidCompanionWindow")
 
-  local title = window:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-  title:SetPoint("TOP", 0, -5)
-  title:SetText(ns.TITLE)
+  -- The menu: a darker column down the left, an entry a page. The page shown has the
+  -- accent bar and a lighter fill.
+  local side = Skin.Fill(window, Skin.color.side, "BACKGROUND", -6)
+  side:SetPoint("TOPLEFT", 1, -Skin.TITLE_HEIGHT - 2)
+  side:SetPoint("BOTTOMLEFT", 1, 1)
+  side:SetWidth(MENU - 4)
+  local sideEdge = Skin.Fill(window, Skin.color.line, "BORDER")
+  sideEdge:SetPoint("TOPLEFT", side, "TOPRIGHT")
+  sideEdge:SetPoint("BOTTOMLEFT", side, "BOTTOMRIGHT")
+  sideEdge:SetWidth(1)
 
-  -- The menu.
+  local dim = Skin.color.dim
   window.menu = {}
   for i, key in ipairs(MENU_ORDER) do
-    local button = CreateFrame("Button", nil, window, "UIPanelButtonTemplate")
-    button:SetSize(MENU - 20, 26)
+    local button = CreateFrame("Button", nil, window)
+    button:SetSize(MENU - 4, 30)
     if key == "options" then
-      button:SetPoint("BOTTOMLEFT", 14, 14)
+      button:SetPoint("BOTTOMLEFT", 1, 8)
     else
-      button:SetPoint("TOPLEFT", 14, -34 - (i - 1) * 30)
+      button:SetPoint("TOPLEFT", 1, -36 - (i - 1) * 32)
     end
-    button:SetText(pages[key].title)
+    local hover = Skin.Fill(button, Skin.color.hover, "HIGHLIGHT")
+    hover:SetAllPoints()
+    button.fill = Skin.Fill(button, Skin.color.selected, "BACKGROUND")
+    button.fill:SetAllPoints()
+    button.bar = Skin.Fill(button, Skin.color.accent, "BORDER")
+    button.bar:SetPoint("TOPLEFT")
+    button.bar:SetPoint("BOTTOMLEFT")
+    button.bar:SetWidth(3)
+    button.icon = button:CreateTexture(nil, "ARTWORK")
+    button.icon:SetTexture(MENU_ICON[key])
+    button.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    button.icon:SetSize(18, 18)
+    button.icon:SetPoint("LEFT", 14, 0)
+    button.label = button:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+    button.label:SetPoint("LEFT", button.icon, "RIGHT", 9, 0)
+    button.label:SetText(pages[key].title)
+    function button:SetSelected(on)
+      if on then
+        self.fill:Show()
+        self.bar:Show()
+        self.icon:SetDesaturated(false)
+        self.icon:SetAlpha(1)
+        self.label:SetTextColor(1, 1, 1)
+      else
+        self.fill:Hide()
+        self.bar:Hide()
+        self.icon:SetDesaturated(true)
+        self.icon:SetAlpha(0.7)
+        self.label:SetTextColor(dim[1], dim[2], dim[3])
+      end
+    end
     button:SetScript("OnClick", function()
       ns.db.page = key
       list.scroll:SetVerticalScroll(0)
@@ -1264,6 +1352,7 @@ local function build()
   -- The page.
   window.heading = window:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
   window.heading:SetPoint("TOPLEFT", MENU + 10, -38)
+  window.heading:SetTextColor(1, 1, 1)
 
   -- Sort buttons, right-aligned; a page lists the ones it has in `sorts`.
   sortBar = CreateFrame("Frame", nil, window)
@@ -1271,8 +1360,7 @@ local function build()
   sortBar:SetPoint("TOPRIGHT", -34, -34)
   sortBar.buttons = {}
   for i = 1, 3 do
-    local button = CreateFrame("Button", nil, sortBar, "UIPanelButtonTemplate")
-    button:SetSize(100, 22)
+    local button = Skin.Tab(sortBar, 100, 24)
     button:SetScript("OnClick", function(self)
       ns.db[sortBar.key] = self.value
       list.scroll:SetVerticalScroll(0)
@@ -1301,8 +1389,7 @@ local function build()
   scanBar:SetHeight(26)
   scanBar:Hide()
 
-  scanBar.button = CreateFrame("Button", nil, scanBar, "UIPanelButtonTemplate")
-  scanBar.button:SetSize(150, 22)
+  scanBar.button = Skin.Button(scanBar, "", 150, 22)
   scanBar.button:SetPoint("LEFT", 0, 0)
   scanBar.button:SetScript("OnClick", ns.ToggleScan)
 
@@ -1310,10 +1397,11 @@ local function build()
   scanBar.bar:SetPoint("LEFT", scanBar.button, "RIGHT", 10, 0)
   scanBar.bar:SetPoint("RIGHT", scanBar, "RIGHT", 0, 0)
   scanBar.bar:SetHeight(16)
-  scanBar.bar:SetStatusBarTexture("Interface/TargetingFrame/UI-StatusBar")
+  scanBar.bar:SetStatusBarTexture(Skin.BAR)
   local back = scanBar.bar:CreateTexture(nil, "BACKGROUND")
   back:SetAllPoints()
   back:SetColorTexture(0, 0, 0, 0.5)
+  Skin.Border(scanBar.bar, Skin.color.line, "OVERLAY")
   scanBar.bar.text = scanBar.bar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
   scanBar.bar.text:SetPoint("LEFT", 6, 0)
   scanBar.bar.text:SetPoint("RIGHT", -6, 0)

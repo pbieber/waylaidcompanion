@@ -388,8 +388,7 @@ if not CreateFrame then return end
 local window
 
 local function makeWindow()
-  window = CreateFrame("Frame", "PuggerWaylaidCompanionShare", UIParent, "BasicFrameTemplateWithInset")
-  window:SetSize(460, 320)
+  window = ns.Skin.Window("PuggerWaylaidCompanionShare", UIParent, 460, 320)
   window:SetPoint("CENTER", 0, 60)
   window:SetFrameStrata("DIALOG")
   window:SetToplevel(true)
@@ -402,17 +401,20 @@ local function makeWindow()
   window:Hide()
   tinsert(UISpecialFrames, "PuggerWaylaidCompanionShare")
 
-  window.title = window:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-  window.title:SetPoint("TOP", 0, -5)
-
   window.help = window:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-  window.help:SetPoint("TOPLEFT", 16, -32)
-  window.help:SetPoint("TOPRIGHT", -16, -32)
+  window.help:SetPoint("TOPLEFT", 16, -36)
+  window.help:SetPoint("TOPRIGHT", -16, -36)
   window.help:SetJustifyH("LEFT")
+  window.help:SetTextColor(unpack(ns.Skin.color.accent))
 
   local scroll = CreateFrame("ScrollFrame", "PuggerWaylaidCompanionShareScroll", window, "UIPanelScrollFrameTemplate")
   scroll:SetPoint("TOPLEFT", 16, -70)
   scroll:SetPoint("BOTTOMRIGHT", -34, 48)
+  -- A darker well behind the text.
+  local well = ns.Skin.Fill(window, { 0, 0, 0, 0.35 }, "BACKGROUND", -5)
+  well:SetPoint("TOPLEFT", scroll, "TOPLEFT", -4, 4)
+  well:SetPoint("BOTTOMRIGHT", scroll, "BOTTOMRIGHT", 4, -4)
+  ns.Skin.Border(window, ns.Skin.color.line, "BORDER", well)
   window.box = CreateFrame("EditBox", nil, scroll)
   window.box:SetMultiLine(true)
   window.box:SetMaxLetters(0)
@@ -424,10 +426,8 @@ local function makeWindow()
   scroll:EnableMouse(true)
   scroll:SetScript("OnMouseDown", function() window.box:SetFocus() end)
 
-  window.go = CreateFrame("Button", nil, window, "UIPanelButtonTemplate")
-  window.go:SetSize(110, 22)
+  window.go = ns.Skin.Button(window, "Import", 110, 22)
   window.go:SetPoint("BOTTOMLEFT", 16, 14)
-  window.go:SetText("Import")
   window.go:SetScript("OnClick", function()
     local data, why = ns.ShareDecode(window.box:GetText())
     if not data then
@@ -443,10 +443,8 @@ local function makeWindow()
     window:Hide()
   end)
 
-  window.close = CreateFrame("Button", nil, window, "UIPanelButtonTemplate")
-  window.close:SetSize(90, 22)
+  window.close = ns.Skin.Button(window, "Close", 90, 22)
   window.close:SetPoint("BOTTOMRIGHT", -16, 14)
-  window.close:SetText("Close")
   window.close:SetScript("OnClick", function() window:Hide() end)
 end
 

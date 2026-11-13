@@ -625,8 +625,7 @@ local function makeDialog()
   -- A child of the game's auction house window, like the buy buttons of other auction
   -- addons.
   local parent = AuctionHouseFrame or UIParent
-  dialog = CreateFrame("Frame", "PuggerWaylaidCompanionBuy", parent, "BasicFrameTemplateWithInset")
-  dialog:SetSize(440, 230)
+  dialog = ns.Skin.Window("PuggerWaylaidCompanionBuy", parent, 440, 230, "Buy")
   dialog:SetPoint("CENTER", parent, "CENTER", 0, 0)
   dialog:SetToplevel(true)
   dialog:SetFrameStrata("DIALOG")
@@ -638,14 +637,11 @@ local function makeDialog()
   dialog:SetScript("OnDragStop", dialog.StopMovingOrSizing)
   dialog:Hide()
 
-  local title = dialog:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-  title:SetPoint("TOP", 0, -5)
-  title:SetText("Buy")
-
   dialog.heading = dialog:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-  dialog.heading:SetPoint("TOPLEFT", 16, -34)
-  dialog.heading:SetPoint("TOPRIGHT", -16, -34)
+  dialog.heading:SetPoint("TOPLEFT", 16, -36)
+  dialog.heading:SetPoint("TOPRIGHT", -16, -36)
   dialog.heading:SetJustifyH("LEFT")
+  dialog.heading:SetTextColor(unpack(ns.Skin.color.accent))
 
   -- "Paying 1 [gold] 20 [silver] for:"
   dialog.pay = dialog:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
@@ -681,6 +677,8 @@ local function makeDialog()
   dialog.item:SetPoint("LEFT", dialog, "TOPLEFT", 90, ROW)
   dialog.item.icon = dialog.item:CreateTexture(nil, "ARTWORK")
   dialog.item.icon:SetAllPoints()
+  dialog.item.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+  ns.Skin.Border(dialog.item, ns.Skin.color.edge, "OVERLAY")
   dialog.item:SetScript("OnEnter", function(self)
     if not self.id then return end
     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
@@ -689,8 +687,7 @@ local function makeDialog()
   end)
   dialog.item:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
-  dialog.max = CreateFrame("Button", nil, dialog, "UIPanelButtonTemplate")
-  dialog.max:SetSize(70, 22)
+  dialog.max = ns.Skin.Button(dialog, "", 70, 22)
   dialog.max:SetPoint("RIGHT", dialog, "TOPRIGHT", -16, ROW)
   dialog.max:SetScript("OnClick", function()
     local s = step()
@@ -711,21 +708,16 @@ local function makeDialog()
   dialog.notes:SetJustifyH("LEFT")
   dialog.notes:SetJustifyV("TOP")
 
-  dialog.buy = CreateFrame("Button", nil, dialog, "UIPanelButtonTemplate")
-  dialog.buy:SetSize(110, 22)
+  dialog.buy = ns.Skin.Button(dialog, "", 110, 22)
   dialog.buy:SetPoint("BOTTOMLEFT", 16, 14)
   dialog.buy:SetScript("OnClick", function() onBuy() end)
 
-  dialog.cancel = CreateFrame("Button", nil, dialog, "UIPanelButtonTemplate")
-  dialog.cancel:SetSize(90, 22)
+  dialog.cancel = ns.Skin.Button(dialog, "Cancel", 90, 22)
   dialog.cancel:SetPoint("BOTTOMRIGHT", -16, 14)
-  dialog.cancel:SetText("Cancel")
   dialog.cancel:SetScript("OnClick", function() finish(nil) end)
 
-  dialog.skip = CreateFrame("Button", nil, dialog, "UIPanelButtonTemplate")
-  dialog.skip:SetSize(90, 22)
+  dialog.skip = ns.Skin.Button(dialog, "Skip", 90, 22)
   dialog.skip:SetPoint("RIGHT", dialog.cancel, "LEFT", -6, 0)
-  dialog.skip:SetText("Skip")
   dialog.skip:SetScript("OnClick", function() if buy then nextStep(true) end end)
 
   -- Closing the dialog any way at all ends the purchase.

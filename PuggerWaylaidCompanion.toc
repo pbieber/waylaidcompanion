@@ -13,6 +13,7 @@ Data/Writs.lua
 Data/Crates.lua
 Data/Recorded.lua
 Core.lua
+Theme.lua
 Learn.lua
 Scan.lua
 Buy.lua
