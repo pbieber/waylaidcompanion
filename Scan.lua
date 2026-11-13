@@ -1,6 +1,7 @@
 --[[
-Scanning the auction house for every price the pages use: each writ, what it asks for,
-each crate and what fills it. One search per item, by name, the way Auctionator searches;
+Scanning the auction house for the prices a page uses: from the writs page each writ and
+what it asks for, from the crates page each crate and what fills it (/pwc scan: both). One
+search per item, by name, the way Auctionator searches;
 the lowest price listed for that exact item is kept in the saved settings
 (ns.ScannedPrices), with the time, and Core.lua weighs it against Auctionator's own price
 by which is newer.
@@ -61,35 +62,48 @@ function ns.CanScan()
   return MODERN or LEGACY
 end
 
---- Every item a page prices, once each, with the name the data has for it.
-local function itemsToScan()
+--- The items a scope prices, once each, with the name the data has for it: "writs" the
+--- player's writs and what they ask for, "crates" the crates and what fills them, nil both.
+local function scopeItems(scope)
   local list, seen = {}, {}
   local function add(id, name)
     if id and not seen[id] then
       seen[id] = true
       list[#list + 1] = { id = id, name = name }
-      if C_Item and C_Item.RequestLoadItemDataByID then pcall(C_Item.RequestLoadItemDataByID, id) end
     end
   end
-  for _, writ in ipairs(ns.writs) do
-    if ns.ForPlayer(writ) then
-      add(writ.writItem)
-      add(writ.item, writ.name)
+  if scope ~= "crates" then
+    for _, writ in ipairs(ns.writs) do
+      if ns.ForPlayer(writ) then
+        add(writ.writItem)
+        add(writ.item, writ.name)
+      end
     end
   end
-  for _, crate in ipairs(ns.crates) do
-    add(crate.item)
-    for _, bundle in ipairs(crate.bundles) do add(bundle.item, bundle.name) end
+  if scope ~= "writs" then
+    for _, crate in ipairs(ns.crates) do
+      add(crate.item)
+      for _, bundle in ipairs(crate.bundles) do add(bundle.item, bundle.name) end
+    end
   end
   return list
 end
 
---- { running, done, total, item (name being searched), found, last } for the bar.
+--- The items to scan for a scope, with the game asked to load each one's name.
+local function itemsToScan(scope)
+  local list = scopeItems(scope)
+  if C_Item and C_Item.RequestLoadItemDataByID then
+    for _, item in ipairs(list) do pcall(C_Item.RequestLoadItemDataByID, item.id) end
+  end
+  return list
+end
+
+--- { running, scope, done, total, item (name being searched), found, last } for the bar.
 function ns.ScanProgress()
   if not scan then return { running = false, last = last } end
   local item = scan.items[scan.index]
   return {
-    running = true, done = scan.index - 1, total = #scan.items, found = scan.found,
+    running = true, scope = scan.scope, done = scan.index - 1, total = #scan.items, found = scan.found,
     item = item and ((GetItemInfo and GetItemInfo(item.id)) or item.name),
   }
 end
@@ -225,22 +239,25 @@ driver:SetScript("OnUpdate", function(self, elapsed)
   end
 end)
 
---- When the newest price our own scans found was seen; nil before the first scan.
-function ns.LastScanTime()
-  local newest
-  for _, seen in pairs(ns.ScannedPrices() or {}) do
-    if not newest or seen[2] > newest then newest = seen[2] end
+--- When the newest price our own scans found was seen, among a scope's items (see
+--- scopeItems; nil for all); nil before the first scan.
+function ns.LastScanTime(scope)
+  local prices, newest = ns.ScannedPrices() or {}, nil
+  for _, item in ipairs(scopeItems(scope)) do
+    local seen = prices[item.id]
+    if seen and (not newest or seen[2] > newest) then newest = seen[2] end
   end
   return newest
 end
 
---- Start a scan; false and a reason when it can't.
-function ns.StartScan()
+--- Start a scan of a scope ("writs", "crates", or nil for both); false and a reason when
+--- it can't.
+function ns.StartScan(scope)
   if scan then return false, "Scan running." end
   if not ns.CanScan() then return false, "No AH search on this client." end
   if not ahOpen then return false, "Open the AH." end
   if ns.Buying and ns.Buying() then return false, "Finish buying." end
-  scan = { items = itemsToScan(), index = 1, page = 0, found = 0, state = "send", waited = 0 }
+  scan = { scope = scope, items = itemsToScan(scope), index = 1, page = 0, found = 0, state = "send", waited = 0 }
   driver:Show()
   notify()
   return true
@@ -250,10 +267,10 @@ function ns.StopScan()
   if scan then finish(true) end
 end
 
---- Start a scan, or stop the one running; says why when it can't start.
-function ns.ToggleScan()
+--- Start a scan of a scope, or stop the one running; says why when it can't start.
+function ns.ToggleScan(scope)
   if scan then return ns.StopScan() end
-  local ok, why = ns.StartScan()
+  local ok, why = ns.StartScan(scope)
   if not ok then print(ns.TITLE .. ": " .. why) end
 end
 

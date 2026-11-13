@@ -768,8 +768,8 @@ local function crateValue(part)
 end
 
 --- A crate's or a bundle's Cost column: the money, "+ ?" when a part of it has no price
---- and "*" when a price it is made of is old; per favor, "~" before it when the favor is
---- an estimate, and "favor ?" while the favor is unknown. `cost` is the crate's.
+--- and "*" when a price it is made of is old; per favor, "favor ?" while the favor is
+--- unknown. `cost` is the crate's.
 local function crateCostText(part, cost)
   if not ns.HasPrices() then return "" end
   local value = crateValue(part)
@@ -778,30 +778,27 @@ local function crateCostText(part, cost)
     return ns.Color(GREY, "no price")
   end
   local text = ns.Coins(value)
-  if perFavor() and cost.favorEstimated then text = ns.Color(GREY, "~") .. text end
   if part.partial then text = text .. ns.Color(ORANGE, " + ?") end
   if part.old then text = text .. ns.Color(ORANGE, " *") end
   return text
 end
 
 --- Tooltip lines for a crate filled with one bundle: what it costs, in all and by part,
---- and per favorScale favor at every amount its tier is known to pay.
+--- and per favorScale favor for each quality of crate.
 local function crateCostLines(lines, crate, cost, bundle, name)
   local part = cost.bundles[bundle] or {}
   costLines(lines, { { "Crate", cost.crate }, { name, part.material } })
   if part.each and bundle.count > 1 then lines[#lines + 1] = { "  Each", ns.Coins(part.each) } end
   if not ns.HasPrices() then return end
   local label = "Cost / " .. ns.ScaleLabel(ns.db.favorScale, "favor")
-  local amounts, estimated = ns.CrateFavor(crate.tier)
-  if #amounts == 0 then
+  local pays = ns.CrateFavor(crate.tier)
+  if #pays == 0 then
     lines[#lines + 1] = { ns.Color(GOLD, label), ns.Color(GREY, "favor unknown") }
   elseif part.perFavor then
-    for _, amount in ipairs(amounts) do
-      lines[#lines + 1] = { ns.Color(GOLD, ("%s (pays %s%d)"):format(label, estimated and "~" or "", amount)),
-        ns.Coins(part.total / amount * ns.db.favorScale) .. (part.partial and " + ?" or "") }
-    end
-    if estimated then
-      lines[#lines + 1] = { ns.Color(ORANGE, "  Favor estimated. Saved on turn-in.") }
+    for _, pay in ipairs(pays) do
+      lines[#lines + 1] = {
+        ns.Color(GOLD, ("%s (%s, pays %d)"):format(label, ns.CRATE_QUALITIES[pay.quality], pay.amount)),
+        ns.Coins(part.total / pay.amount * ns.db.favorScale) .. (part.partial and " + ?" or "") }
     end
   end
   if part.partial and part.total and part.total > 0 then
@@ -827,22 +824,17 @@ local CRATE_COST_HEADERS = {
   none = "No price",
 }
 
---- The Merchant's Favor column for a crate tier, and the line for its tooltip.
+--- The Merchant's Favor column for a crate tier, each quality's amount in its colour
+--- ("15 / 30"), and the line for its tooltip.
 local function favorText(tier)
-  local amounts, estimated = ns.CrateFavor(tier)
-  if #amounts == 0 then
-    return ns.Color(GREY, "Unknown"), "Merchant's Favor unknown. Saved on turn-in."
+  local pays = ns.CrateFavor(tier)
+  if #pays == 0 then return ns.Color(GREY, "Unknown"), "Merchant's Favor unknown." end
+  local cells, words = {}, {}
+  for _, pay in ipairs(pays) do
+    cells[#cells + 1] = ns.Color(ns.CRATE_QUALITY_COLOR[pay.quality], tostring(pay.amount))
+    words[#words + 1] = ("%d for a %s crate"):format(pay.amount, ns.CRATE_QUALITIES[pay.quality])
   end
-  if estimated then
-    return ns.Color(GREY, "~" .. table.concat(amounts, " or ")),
-      "Merchant's Favor estimated: " .. table.concat(amounts, " or ")
-        .. ", by crate quality (twice the tier below). The real amount is saved on turn-in."
-  end
-  local text = table.concat(amounts, " or ")
-  if #amounts > 1 then
-    return text, "Merchant's Favor: " .. table.concat(amounts, " or ") .. ", by crate quality."
-  end
-  return text, "Merchant's Favor: " .. amounts[1] .. "."
+  return table.concat(cells, ns.Color(GREY, " / ")), "Merchant's Favor: " .. table.concat(words, ", ") .. "."
 end
 
 pages.crates = {
@@ -1296,6 +1288,8 @@ local function ago(when)
   return ("%d day%s"):format(days, days == 1 and "" or "s")
 end
 
+local SCAN_NAMES = { writs = "Writs", crates = "Crates", all = "Writs and crates" }
+
 --- Bring the scan button and progress bar up to date.
 local function updateScanBar()
   if not scanBar then return end
@@ -1307,12 +1301,14 @@ local function updateScanBar()
     bar:SetMinMaxValues(0, math.max(1, p.total))
     bar:SetValue(p.done)
     bar:SetStatusBarColor(0.2, 0.55, 0.25)
-    bar.text:SetText(("%d / %d  %s"):format(p.done, p.total, p.item or ""))
+    -- Name what is being scanned when it isn't this page's items.
+    local what = p.scope ~= scanBar.scope and (SCAN_NAMES[p.scope or "all"] .. ": ") or ""
+    bar.text:SetText(("%s%d / %d  %s"):format(what, p.done, p.total, p.item or ""))
     return
   end
   button:SetText("Scan AH")
   button:SetEnabled(ns.CanScan() and ns.AuctionHouseOpen())
-  local lastScan = ns.LastScanTime()
+  local lastScan = ns.LastScanTime(scanBar.scope)
   bar:SetMinMaxValues(0, 1)
   bar:SetValue(lastScan and 1 or 0)
   bar:SetStatusBarColor(0.22, 0.22, 0.25)
@@ -1355,6 +1351,8 @@ function refresh()
   end
 
   if page.footer == "scan" then
+    -- The scan button scans the items this page prices.
+    scanBar.scope = key
     note:Hide()
     scanBar:Show()
     updateScanBar()
@@ -1510,7 +1508,8 @@ local function build()
   note:SetJustifyH("LEFT")
   note:SetJustifyV("MIDDLE")
 
-  -- The writs and crates pages' foot: the auction house scan and its progress.
+  -- The writs and crates pages' foot: the auction house scan of the page's items, and
+  -- its progress.
   scanBar = CreateFrame("Frame", nil, window)
   scanBar:SetPoint("BOTTOMLEFT", MENU + 8, 12)
   scanBar:SetPoint("BOTTOMRIGHT", -14, 12)
@@ -1519,7 +1518,7 @@ local function build()
 
   scanBar.button = Skin.Button(scanBar, "", 150, 22)
   scanBar.button:SetPoint("LEFT", 0, 0)
-  scanBar.button:SetScript("OnClick", ns.ToggleScan)
+  scanBar.button:SetScript("OnClick", function() ns.ToggleScan(scanBar.scope) end)
 
   scanBar.bar = CreateFrame("StatusBar", nil, scanBar)
   scanBar.bar:SetPoint("LEFT", scanBar.button, "RIGHT", 10, 0)

@@ -312,7 +312,7 @@ end
 --- cheapest of them that has a price.
 ---
 --- { crate (the empty crate's price), favor (the least Merchant's Favor its tier pays,
----   nil when unknown), favorEstimated (that is an estimate, see CrateFavor),
+---   which is a white crate's),
 ---   bundles = { [bundle] = part }, cheapest (the cheapest bundle,
 ---   nil when none has a price), and the cheapest's part fields }
 ---
@@ -322,9 +322,9 @@ end
 --- for each Merchant's Favor; nil without a price or a favor amount) }.
 function ns.CrateCost(crate)
   local box, boxAge = ns.PriceInfo(crate.item)
-  local amounts, estimated = ns.CrateFavor(crate.tier)
-  local favor = amounts[1]
-  local cost = { crate = box, favor = favor, favorEstimated = estimated, bundles = {} }
+  local least = ns.CrateFavor(crate.tier)[1]
+  local favor = least and least.amount
+  local cost = { crate = box, favor = favor, bundles = {} }
   for _, b in ipairs(crate.bundles) do
     local each, eachAge = ns.PriceInfo(b.item)
     local material = each and each * b.count
@@ -511,37 +511,14 @@ for _, row in ipairs(ns.CRATES) do
   ns.crates[#ns.crates + 1] = crate
 end
 
---- The Merchant's Favor a filled crate of a tier pays, as the amounts known for it,
---- smallest first: from the shipped data and from what this account has seen paid. While
---- nothing is known, the estimate for the tier and true (empty when there is none).
+--- The Merchant's Favor a filled crate of a tier pays, for each quality of crate, white
+--- first: { { quality (1 white, 2 green), amount }, ... }.
 function ns.CrateFavor(tier)
-  local seen, amounts = {}, {}
-  local function add(n)
-    if n and not seen[n] then
-      seen[n] = true
-      amounts[#amounts + 1] = n
-    end
+  local list = {}
+  for quality, amount in ipairs(ns.CRATE_FAVOR[tier] or {}) do
+    list[#list + 1] = { quality = quality, amount = amount }
   end
-  for _, n in ipairs(ns.CRATE_FAVOR[tier] or {}) do add(n) end
-  for _, source in ipairs({ ns.RECORDED_FAVOR or {}, ns.db and ns.db.favor or {} }) do
-    for key, paid in pairs(source) do
-      if ns.SealedTier(key) == tier then
-        for amount, times in pairs(paid) do
-          -- A turn-in has a small chance to pay double: leave out an amount that is
-          -- twice another and rare next to it.
-          local half = paid[amount / 2]
-          if not (half and half > times * 4) then add(amount) end
-        end
-      end
-    end
-  end
-  if #amounts == 0 and ns.CRATE_FAVOR_ESTIMATE[tier] then
-    for _, n in ipairs(ns.CRATE_FAVOR_ESTIMATE[tier]) do add(n) end
-    table.sort(amounts)
-    return amounts, true
-  end
-  table.sort(amounts)
-  return amounts, false
+  return list
 end
 
 --- The player's crate turn-in: { id, name, map, x, y, zone, faction }, nil for no side.
@@ -677,7 +654,7 @@ local QUEST_EVENTS = { PLAYER_ENTERING_WORLD = true, QUEST_ACCEPTED = true, QUES
 
 local events = CreateFrame("Frame")
 for _, event in ipairs({ "ADDON_LOADED", "PLAYER_LOGIN", "BAG_UPDATE", "QUEST_TURNED_IN", "GET_ITEM_INFO_RECEIVED",
-  "UPDATE_FACTION", "QUEST_COMPLETE", "CHAT_MSG_CURRENCY", "PLAYER_ENTERING_WORLD", "QUEST_ACCEPTED", "QUEST_LOG_UPDATE", "QUEST_POI_UPDATE",
+  "UPDATE_FACTION", "PLAYER_ENTERING_WORLD", "QUEST_ACCEPTED", "QUEST_LOG_UPDATE", "QUEST_POI_UPDATE",
   "MAIL_SHOW", "MAIL_INBOX_UPDATE", "MAIL_CLOSED", "BANKFRAME_OPENED", "BANKFRAME_CLOSED", "PLAYERBANKSLOTS_CHANGED" }) do
   -- Registering an event this client does not have is an error.
   pcall(events.RegisterEvent, events, event)
@@ -693,7 +670,8 @@ events:SetScript("OnEvent", function(_, event, arg1)
     db.npcs = db.npcs or {}
     db.writNpc = db.writNpc or {}
     db.minimap = db.minimap or { angle = 215, hide = false }
-    db.favor = db.favor or {}
+    -- What crates were seen to pay, kept before the amounts were shipped (0.6.0).
+    db.favor = nil
     db.mail = db.mail or {}
     db.anySide = db.anySide or {}
     -- Per character ("Name-Realm"): the tracked items in the bags, and in the bank as it
@@ -723,12 +701,7 @@ events:SetScript("OnEvent", function(_, event, arg1)
   end
   if event == "MAIL_INBOX_UPDATE" then scanMail() end
   if QUEST_EVENTS[event] and ns.LocateSoon then ns.LocateSoon() end
-  if event == "QUEST_COMPLETE" then return ns.CrateOffered and ns.CrateOffered() end
-  if event == "CHAT_MSG_CURRENCY" then return ns.CurrencyPaid and ns.CurrencyPaid(arg1) end
-  if event == "QUEST_TURNED_IN" and ns.Learn then
-    ns.Learn(arg1)
-    ns.CrateHandedIn(arg1)
-  end
+  if event == "QUEST_TURNED_IN" and ns.Learn then ns.Learn(arg1) end
   ns.Changed()
   -- The completed flag can trail the turn-in by a moment.
   if event == "QUEST_TURNED_IN" then C_Timer.After(1.5, ns.Changed) end
@@ -750,8 +723,9 @@ SlashCmdList.PUGGERWAYLAID = function(msg)
     ns.db.ownerNames = ns.db.ownerNames == 2 and 1 or 2
     print(ns.TITLE .. ": " .. (ns.db.ownerNames == 2 and "first name and surname." or "first name only."))
     ns.Changed()
-  elseif msg == "scan" then
-    if ns.ToggleScan then ns.ToggleScan() end
+  elseif msg == "scan" or msg == "scan writs" or msg == "scan crates" then
+    -- Both pages' items, or one page's.
+    if ns.ToggleScan then ns.ToggleScan(msg:match("^scan (%a+)$")) end
   elseif msg == "export" then
     if ns.ShowExport then ns.ShowExport() end
   elseif msg == "import" then

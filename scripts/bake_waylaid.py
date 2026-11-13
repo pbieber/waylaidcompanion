@@ -6,7 +6,6 @@ is already in Data/Recorded.lua, and rewrites that file:
 
   - where each Craftsman's Writ is handed in (an NPC, or a map spot nobody has named yet);
   - the writs Data/Writs.lua limits to one side that players had on the other;
-  - the Merchant's Favor each sealed crate paid;
   - what each quartermaster sells (the newest list of each wins).
 
 Shared strings are read from the .txt files in shares/ (any number of strings per file,
@@ -58,7 +57,7 @@ def load_saved(path):
 
 def load_shares(paths):
     """[(label, db)] for every shared string in the files, with the keys the saved
-    settings use (npcs, writNpc, favor, rewards)."""
+    settings use (npcs, writNpc, anySide, rewards)."""
     lua = lupa.LuaRuntime(unpack_returned_tuples=True)
     ns = lua.table(TITLE='Pugger Waylaid Companion')
     chunk = lua.eval('function(src) return assert(loadstring(src, "Share.lua")) end')(
@@ -79,8 +78,7 @@ def load_shares(paths):
                 continue
             data = to_py(data)
             out.append((label, {'npcs': data['npcs'], 'writNpc': data['writs'],
-                                'anySide': data['anySide'], 'favor': data['favor'],
-                                'rewards': data['rewards']}))
+                                'anySide': data['anySide'], 'rewards': data['rewards']}))
     return out
 
 
@@ -105,7 +103,6 @@ def load_shipped():
         'anySide': to_py(ns.RECORDED_ANYSIDE) if ns.RECORDED_ANYSIDE else {},
         'npcs': to_py(ns.RECORDED_NPCS) if ns.RECORDED_NPCS else {},
         'writs': to_py(ns.RECORDED_WRITS) if ns.RECORDED_WRITS else {},
-        'favor': to_py(ns.RECORDED_FAVOR) if ns.RECORDED_FAVOR else {},
         'rewards': to_py(ns.RECORDED_REWARDS) if ns.RECORDED_REWARDS else {},
     }
     return set(to_py(ns.WRIT_NPCS)), writs, names, recorded
@@ -194,7 +191,6 @@ def main():
     shipped_npcs, writs, names, recorded = load_shipped()
     npcs = {k: place(v) for k, v in recorded['npcs'].items()}
     where = dict(recorded['writs'])
-    favor = {k: dict(v) for k, v in recorded['favor'].items()}
     any_side = {q for q, yes in recorded['anySide'].items() if yes is True}
     rewards = {f: dict(shops) for f, shops in recorded['rewards'].items()}
     before = (len(where), sum(isinstance(v, int) for v in where.values()))
@@ -214,8 +210,8 @@ def main():
         changed = 0
         for faction, shops in (db.get('rewards') or {}).items():
             changed += merge_rewards(rewards.setdefault(faction, {}), shops)
-        print('%s: %d writs, %d places, %d favor entries, %d quartermaster lists newer' % (
-            label, len(account_writs), len(account_npcs), len(db.get('favor') or {}), changed))
+        print('%s: %d writs, %d places, %d quartermaster lists newer' % (
+            label, len(account_writs), len(account_npcs), changed))
         for quest, at in account_writs.items():
             if quest not in writs:
                 print('  ! quest %s is not a known writ, skipped' % quest)
@@ -241,12 +237,6 @@ def main():
         for quest, yes in (db.get('anySide') or {}).items():
             if yes is True and recorded['sides'].get(quest):
                 any_side.add(quest)
-        # Counts are folded in as the larger of the two, not added, so that baking the
-        # same saved file twice does not double them.
-        for key, paid in (db.get('favor') or {}).items():
-            kept = favor.setdefault(key, {})
-            for amount, times in paid.items():
-                kept[amount] = max(kept.get(amount, 0), times)
 
     used = set(where.values())
     npcs = {k: v for k, v in npcs.items() if k in used}
@@ -279,13 +269,6 @@ def main():
               "ns.RECORDED_ANYSIDE = {"]
     for quest in sorted(any_side):
         lines.append('  [%d] = true, -- %s' % (quest, names.get(quest, '?')))
-    lines += ["}", "",
-              "-- Merchant's Favor paid for a filled crate:",
-              "-- [sealed crate item, or \"q<quest>\" when the crate was not seen] = { [amount] = times seen }",
-              "ns.RECORDED_FAVOR = {"]
-    for key in sorted(favor, key=order):
-        paid = ', '.join('[%d] = %d' % (a, favor[key][a]) for a in sorted(favor[key]))
-        lines.append('  %s = { %s },' % (lua_key(key), paid))
     lines += ["}", "",
               "-- What each quartermaster sells, as Rewards.lua keeps it:",
               "-- [faction] = { [NPC id] = { npc, time, items = { { id, name, price, quantity, standing, costs } } } }",

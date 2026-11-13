@@ -105,25 +105,16 @@ ns.CRATES = {
     { 16000, 2, "Thorium Tube" } } },
 }
 
--- Merchant's Favor a filled crate pays, by tier: { common (white) crate, uncommon (green)
--- crate }. From wow.gg, which has the first two tiers only; the rest is recorded in game
--- (Learn.lua) and baked into Data/Recorded.lua.
-ns.CRATE_FAVOR = { { 5, 10 }, { 10, 20 } }
+-- A filled crate comes in qualities that share a name: a white and a green "Sealed
+-- Apprentice Crate" are two items, and the green one pays twice the favor.
+ns.CRATE_QUALITIES = { "white", "green" }
+ns.CRATE_QUALITY_COLOR = { "ffffffff", "ff1eff00" }
 
--- A guess for the tiers nobody has published, by the doubling from Apprentice to
--- Journeyman. Used only while neither the data above nor a recorded turn-in knows the
--- tier, and shown as an estimate ("~").
-ns.CRATE_FAVOR_ESTIMATE = { [3] = { 20, 40 }, [4] = { 40, 80 } }
-
--- A filled crate is one of fifteen "Sealed <tier> Crate" items: three runs of five tiers
--- (Apprentice, Journeyman, Expert, Artisan, Elite).
-ns.SEALED_FIRST, ns.SEALED_LAST = 248765, 248779
-
---- The tier (1-5) of a sealed crate item, nil for anything else.
-function ns.SealedTier(item)
-  if type(item) ~= "number" or item < ns.SEALED_FIRST or item > ns.SEALED_LAST then return nil end
-  return (item - ns.SEALED_FIRST) % 5 + 1
-end
+-- Merchant's Favor a filled crate pays, by tier: { white (common) crate, green (uncommon)
+-- crate }. The first two tiers are from wow.gg; Expert and the white Artisan crate were
+-- turned in in game (2026-11-13), and the green Artisan crate is twice the white one, as
+-- in every other tier.
+ns.CRATE_FAVOR = { { 5, 10 }, { 10, 20 }, { 15, 30 }, { 20, 40 } }
 
 -- Player level a crate of each tier asks for.
 ns.CRATE_LEVEL = { 10, 10, 20, 35 }
