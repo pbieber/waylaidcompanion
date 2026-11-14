@@ -912,7 +912,17 @@ pages.crates = {
         entries[#entries + 1] = {
           icon = icon,
           item = crate.item,
-          tip = "Needs one material below.\n" .. favorTip .. "\n" .. where,
+          tip = function()
+            local tip = "Needs one material below.\n" .. favorTip .. "\n" .. where
+            if ns.AuctionHouseOpen() and ns.CanBuy() then
+              return tip .. "\n|cff40d040Click: buy, with its cheapest material.|r"
+            end
+            return tip
+          end,
+          -- At the auction house: buy crates and their cheapest material (Buy.lua).
+          click = function()
+            if ns.AuctionHouseOpen() and ns.CanBuy() then ns.BuyForCrate(crate) end
+          end,
           lines = function()
             local lines = { { " " } }
             local now = ns.CrateCost(crate)

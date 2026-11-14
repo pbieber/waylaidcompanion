@@ -1,11 +1,12 @@
 --[[
-Buying writs and what they ask for at the auction house, from the writs page: with the
-auction house open, clicking a writ's row opens a small window inside the auction house
-window. It goes through two steps:
+Buying writs or crates and what fills them at the auction house, from the writs and
+crates pages: with the auction house open, clicking a writ's or a crate's row opens a
+small window inside the auction house window. It goes through two steps:
 
-  1. the writ: how many to buy (Max: every one listed);
-  2. the material: as many as those writs and the ones in the bags ask for, less what
-     the bags hold.
+  1. the writ or crate (the lead): how many to buy (Max: every one listed);
+  2. the material: as many as those and the ones in the bags ask for, less what the bags
+     hold. For a crate, its cheapest material, and the crates the bags' other materials
+     fill already need none.
 
 Each step shows the item and "Paying <price> for:" above it.
 
@@ -106,7 +107,7 @@ end
 ---   about   the price is an estimate from the listings
 ---   status  a line in place of the price
 ---   qty     the quantity beside the item
----   edit    the quantity is the writ count the player sets (with Max)
+---   edit    the quantity is the writ or crate count the player sets (with Max)
 ---   notes   lines under the item
 ---   action  the Buy button's label (nil disables it)
 local function show(view)
@@ -186,12 +187,21 @@ local function fillSearchBox(name)
   return false
 end
 
---- How many of the material the writs ask for, beyond what the bags hold: the writs
---- held when the window opened plus those bought (or planned) here.
+--- How many writs or crates want the material: those held when the window opened plus
+--- those bought (or planned) here, less the crates the bags' other materials fill.
+local function leadsToFill()
+  local w = buy.leadStep
+  return math.max(0, buy.leadHeld + (w and (w.planned or 0) or 0) - (buy.otherFills or 0))
+end
+
+--- How many of the material those ask for, beyond what the bags hold.
 local function materialNeed()
-  local w = buy.writStep
-  local writs = buy.writsHeld + (w and (w.planned or 0) or 0)
-  return math.max(0, writs * buy.count - buy.materialHeld)
+  return math.max(0, leadsToFill() * buy.count - buy.materialHeld)
+end
+
+--- "writ" or "writs", "crate" or "crates".
+local function noun(n)
+  return buy.noun .. (n == 1 and "" or "s")
 end
 
 --- Move on to the next item; fromClick when a click led here, so the search can go out
@@ -222,7 +232,7 @@ function search(fromClick)
   -- one goes unanswered or answers with old listings: then browse for the item again.
   s.key = ns.ItemKey and ns.ItemKey(s.id, STALE)
   buy.waited, buy.seen, buy.late = 0, {}, false
-  if s.material and buy.writStep then
+  if s.material and buy.leadStep then
     s.need = materialNeed()
     if s.need == 0 then
       buy.state = "enough"
@@ -294,12 +304,12 @@ end
 function offer()
   local s = step()
   buy.state = "offer"
-  local want = s.writ and s.want or s.need
+  local want = s.lead and s.want or s.need
   local p = plan(s, want)
   s.plan = p
   local notes = {}
-  if s.writ then
-    notes[#notes + 1] = ns.Color(GREY, ("Listed: %d. In bags: %d."):format(s.listed, buy.writsHeld))
+  if s.lead then
+    notes[#notes + 1] = ns.Color(GREY, ("Listed: %d. In bags: %d."):format(s.listed, buy.leadHeld))
   elseif p.quantity < want then
     notes[#notes + 1] = ns.Color(RED, ("Only %d listed."):format(p.quantity))
   end
@@ -310,18 +320,22 @@ function offer()
   if each then notes[#notes + 1] = ns.Color(GREY, each) end
   notes[#notes + 1] = wasNote(s, p.quantity > 0 and p.price)
   notes[#notes + 1] = purse(p.price)
-  if not s.writ and buy.writStep then
-    local writs = buy.writsHeld + (buy.writStep.planned or 0)
-    notes[#notes + 1] = ns.Color(GREY, ("%d writ%s x %d, minus %d in bags."):format(
-      writs, writs == 1 and "" or "s", buy.count, buy.materialHeld))
+  if not s.lead and buy.leadStep then
+    local leads = leadsToFill()
+    notes[#notes + 1] = ns.Color(GREY, ("%d %s x %d, minus %d in bags."):format(
+      leads, noun(leads), buy.count, buy.materialHeld))
+    if (buy.otherFills or 0) > 0 then
+      notes[#notes + 1] = ns.Color(GREY, ("Other materials in bags fill %d %s."):format(
+        buy.otherFills, noun(buy.otherFills)))
+    end
   end
   local action
   if p.quantity > 0 then
     action = (s.kind == "item" and p.quantity > 1) and ("Buy (1 of %d)"):format(p.quantity) or "Buy"
   end
   show({ pay = p.quantity > 0 and p.price or nil, about = s.kind == "commodity",
-    status = "Set an amount.", qty = s.writ and want or p.quantity,
-    edit = s.writ, notes = notes, action = action })
+    status = "Set an amount.", qty = s.lead and want or p.quantity,
+    edit = s.lead, notes = notes, action = action })
 end
 
 --- Listings of a commodity, cheapest first.
@@ -343,7 +357,7 @@ local function commodityResults()
     buy.state = "none"
     return show({ status = ns.Color(GREY, "None listed."), qty = s.need, action = "Skip" })
   end
-  if s.writ then s.want = math.min(s.want, s.listed) end
+  if s.lead then s.want = math.min(s.want, s.listed) end
   offer()
 end
 
@@ -375,7 +389,7 @@ local function itemResults(itemKey)
       notes = { s.note, ns.Color(GREY, ("Bought %d of %d."):format(s.got, s.target)),
         wasNote(s, a.each), purse(a.each) } })
   end
-  if s.writ then s.want = math.min(s.want, s.listed) end
+  if s.lead then s.want = math.min(s.want, s.listed) end
   if bidBlocked then return handOff(s) end
   offer()
 end
@@ -384,8 +398,8 @@ end
 --- buys it with the game's Buyout button.
 function handOff(s)
   buy.state = "handoff"
-  if s.writ then s.planned = s.want end
-  local want = s.writ and s.want or s.need
+  if s.lead then s.planned = s.want end
+  local want = s.lead and s.want or s.need
   local p = plan(s, want)
   show({ pay = p.price, qty = p.quantity, action = "Next", notes = {
     ns.Color(RED, "Blocked by the game."),
@@ -434,7 +448,7 @@ local function onBuy()
   elseif state == "offer" and s.kind == "commodity" then
     local p = s.plan
     s.qty, s.estimate, s.was = p.quantity, p.price, nil
-    if s.writ then s.planned = s.want end
+    if s.lead then s.planned = s.want end
     buy.state, buy.waited, buy.holding, buy.seen = "quote", 0, true, {}
     C_AuctionHouse.StartCommoditiesPurchase(s.id, s.qty)
     if buy and buy.state == "quote" then
@@ -447,7 +461,7 @@ local function onBuy()
       show({ pay = s.total, qty = s.qty, notes = { ns.Color(GREY, "Buying...") } })
     end
   elseif state == "offer" and s.kind == "item" then
-    if s.writ then s.planned = s.want end
+    if s.lead then s.planned = s.want end
     s.target, s.got = s.plan.quantity, 0
     payAuction(s, s.list[1])
   elseif state == "next" then
@@ -669,10 +683,10 @@ driver:SetScript("OnUpdate", function(_, elapsed)
   end
 end)
 
---- The writ count typed in: kept between 0 and what is listed, and the offer redone.
+--- The writ or crate count typed in: kept between 0 and what is listed, and the offer redone.
 local function setWant(value)
   local s = step()
-  if not buy or buy.state ~= "offer" or not s or not s.writ then return end
+  if not buy or buy.state ~= "offer" or not s or not s.lead then return end
   s.want = math.max(0, math.min(math.floor(tonumber(value) or 0), s.listed or 0))
   s.was = nil  -- another amount: the earlier price no longer compares
   offer()
@@ -706,7 +720,7 @@ local function makeDialog()
   dialog.pay:SetPoint("TOPRIGHT", -16, -58)
   dialog.pay:SetJustifyH("LEFT")
 
-  -- The item: quantity (typed in for the writ), "x", icon, name, and Max for the writ.
+  -- The item: quantity (typed in for the lead), "x", icon, name, and Max for the lead.
   local ROW = -104
   dialog.qty = CreateFrame("EditBox", nil, dialog, "InputBoxTemplate")
   dialog.qty:SetSize(44, 20)
@@ -748,7 +762,7 @@ local function makeDialog()
   dialog.max:SetPoint("RIGHT", dialog, "TOPRIGHT", -16, ROW)
   dialog.max:SetScript("OnClick", function()
     local s = step()
-    if s and s.writ then
+    if s and s.lead then
       dialog.qty:ClearFocus()
       setWant(s.listed or 0)
     end
@@ -813,20 +827,51 @@ function ns.BuyMaterials(list)
   search(true)  -- the click in the Transfer menu
 end
 
---- Buy writs and their material: the writ count is set in the window (one to start with
---- when the bags hold none), the material follows it.
-function ns.BuyForWrit(writ)
+--- Buy a writ or crate (the lead) and its material: the lead's count is set in the
+--- window (one to start with when the bags hold none), the material follows it.
+--- lead { id, name }, material { id, name, count (per lead) }; otherFills: leads that
+--- other material in the bags fills already.
+local function buyWithMaterial(title, word, lead, material, otherFills)
   if not canStart() then return end
-
-  local writsHeld = ns.Count(writ.writItem)
-  local writName, writIcon = ns.Item(writ.writItem, "Writ: " .. writ.name)
-  local matName, matIcon = ns.Item(writ.item, writ.name)
-  local writStep = { id = writ.writItem, writ = true, name = writName, icon = writIcon,
-    want = writsHeld == 0 and 1 or 0, need = writsHeld == 0 and 1 or 0 }
-  local matStep = { id = writ.item, material = true, name = matName, icon = matIcon, need = 0 }
+  local held = ns.Count(lead.id)
+  local leadName, leadIcon = ns.Item(lead.id, lead.name)
+  local matName, matIcon = ns.Item(material.id, material.name)
+  local leadStep = { id = lead.id, lead = true, name = leadName, icon = leadIcon,
+    want = held == 0 and 1 or 0, need = held == 0 and 1 or 0 }
+  local matStep = { id = material.id, material = true, name = matName, icon = matIcon, need = 0 }
 
   if not dialog then makeDialog() end
-  buy = { title = writ.name, steps = { writStep, matStep }, index = 1, bought = 0, waited = 0,
-    writStep = writStep, writsHeld = writsHeld, materialHeld = ns.Count(writ.item), count = writ.count }
-  search(true)  -- the click on the writ's row
+  buy = { title = title, noun = word, steps = { leadStep, matStep }, index = 1, bought = 0,
+    waited = 0, leadStep = leadStep, leadHeld = held, materialHeld = ns.Count(material.id),
+    count = material.count, otherFills = otherFills or 0 }
+  search(true)  -- the click on the row
+end
+
+--- Buy writs and their material.
+function ns.BuyForWrit(writ)
+  buyWithMaterial(writ.name, "writ", { id = writ.writItem, name = "Writ: " .. writ.name },
+    { id = writ.item, name = writ.name, count = writ.count })
+end
+
+--- Buy crates and their cheapest material, by the prices known now (the search for it
+--- then finds what it costs). The crates the bags' other materials fill need none.
+function ns.BuyForCrate(crate)
+  local bundle = ns.CrateCost(crate).cheapest
+  if not bundle then
+    -- No material has a price yet: the one the bags hold most crates' worth of, else
+    -- the first.
+    for _, b in ipairs(crate.bundles) do
+      if not bundle or math.floor(ns.Count(b.item) / b.count) > math.floor(ns.Count(bundle.item) / bundle.count) then
+        bundle = b
+      end
+    end
+  end
+  if not bundle then return end
+  local others = 0
+  for _, b in ipairs(crate.bundles) do
+    if b ~= bundle then others = others + math.floor(ns.Count(b.item) / b.count) end
+  end
+  buyWithMaterial("Waylaid Crate: " .. crate.name, "crate",
+    { id = crate.item, name = "Waylaid Crate: " .. crate.name },
+    { id = bundle.item, name = bundle.name, count = bundle.count }, others)
 end

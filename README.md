@@ -8,7 +8,7 @@ Open the window with `/pwc`, the minimap button or the addon compartment.
 
 - **Overview**: your standing, the turn-ins to the next standing and to Exalted, and what is open today.
 - **Craftsman's Writs**: every writ for your side, by tier, profession or cost: material, rep, cost (per 100 rep by default), owned, zone of the turn-in, today. Click a row: map (or, at the auction house, buy).
-- **Waylaid Crates**: every crate, by tier, profession or cost: the Merchant's Favor it pays, its cost with its cheapest material (per favor by default), owned. Each material under a crate shows the crate's cost filled with that one, and the cheapest is ticked. Crates of gathered goods (herbs, ore, textiles, curiosities) are white, crates of crafted goods (ingots, fabrics, parts) green, and a green crate pays twice the favor of a white one of its tier. A turn-in also pays half its favor in silver (5 favor, 2s 50c); that comes off the cost unless you untick **Count the turn-in's silver** under Options.
+- **Waylaid Crates**: every crate, by tier, profession or cost: the Merchant's Favor it pays, its cost with its cheapest material (per favor by default), owned. Each material under a crate shows the crate's cost filled with that one, and the cheapest is ticked. Crates of gathered goods (herbs, ore, textiles, curiosities) are white, crates of crafted goods (ingots, fabrics, parts) green, and a green crate pays twice the favor of a white one of its tier. A turn-in also pays half its favor in silver (5 favor, 2s 50c); that comes off the cost unless you untick **Count the turn-in's silver** under Options. At the auction house, click a crate's row to buy it.
 - **Fastcraft**: the crates in your bags, the materials in your bags that fill them, and how many crates that fills. **Craft** fills them all, one kind after the other (below).
 - **Turn-ins**: every turn-in, by continent. Also marked on the world map.
 - **Rewards**: what your faction's quartermasters sell, one list per profession, each with its own quartermaster, by standing, with its cost and whether you can buy it. Learned the first time you open each quartermaster's shop.
@@ -23,7 +23,7 @@ Prices come from the addon's own auction house scan and from [Auctionator](https
 
 On any list, drag a column's heading onto another to move the column there; each page remembers its order, and **Reset order** under Options puts them back. The writs page shows the reputation at the end of the row.
 
-To scan, open the auction house, then press **Scan AH** under a list. Under the writs list it searches every writ and every material a writ asks for; under the crates list every crate and what fills it. It goes one item at a time, with a progress bar beside the button; a few hundred items take a few minutes. `/pwc scan` searches both lists' items. Closing the auction house stops the scan and keeps what it found. Prices are kept per realm and side.
+To scan, open the auction house, then press **Scan AH** under a list. Under the writs list it searches every writ and every material a writ asks for; under the crates list every crate and what fills it. It goes one item at a time, with a progress bar beside the button; a few hundred items take a few minutes. `/pwc scan` searches both lists' items. Closing the auction house stops the scan and keeps what it found. Prices are kept per realm and side. Each bar's **Last scan** is when a scan of its own list last ran to the end; a scan of the other list doesn't count, though the two share materials.
 
 In the Cost / 100 rep column:
 
@@ -42,10 +42,10 @@ To add a string someone shared, type `/pwc import`, paste it with Ctrl+V and pre
 
 ## Buying at the auction house
 
-With the auction house open, click a writ's row. The buy window shows each item under **Paying** *price* **for:**. Nothing is bought without a click.
+With the auction house open, click a writ's or a crate's row. The buy window shows each item under **Paying** *price* **for:**. Nothing is bought without a click.
 
-1. **Writ.** Type an amount, or **Max** for all listed. Cheapest first; one click per writ.
-2. **Material.** Your writs (in bags plus bought) times what each asks for, minus what your bags hold.
+1. **Writ or crate.** Type an amount, or **Max** for all listed. Cheapest first; one click per writ.
+2. **Material.** Your writs or crates (in bags plus bought) times what each asks for, minus what your bags hold. For a crate it's the crate's cheapest material, and crates that other materials in your bags already fill need none.
 
 Material sold in bulk: **Buy** gets the exact price, **Confirm** pays. **Skip** moves on, **Cancel** stops.
 
