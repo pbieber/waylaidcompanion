@@ -8,6 +8,9 @@ small window inside the auction house window. It goes through two steps:
      hold. For a crate, its cheapest material, and the crates the bags' other materials
      fill already need none.
 
+From the turn-ins page, clicking a writ recipient buys every writ of theirs not held or
+handed in today, one each, then the material those writs ask for, less what the bags hold.
+
 Each step shows the item and "Paying <price> for:" above it.
 
 The game only lets an addon buy from a click, and one click buys one thing, so:
@@ -240,6 +243,23 @@ function search(fromClick)
         notes = { ("In bags: %d. Enough."):format(buy.materialHeld) } })
     end
   end
+  if s.forWrits then
+    -- A recipient's material: only for the writs held, or bought in this window.
+    local writs, count = 0, 0
+    for _, f in ipairs(s.forWrits) do
+      -- A writ handed to the game's window counts as bought: its purchase goes by mail.
+      local w = f.step
+      if not w or (w.got or 0) > 0 or w.handedOff then writs, count = writs + 1, count + f.count end
+    end
+    s.need = math.max(0, count - s.held)
+    s.forNote = ns.Color(GREY, ("For %d writ%s: %d, minus %d in bags."):format(
+      writs, writs == 1 and "" or "s", count, s.held))
+    if s.need == 0 then
+      buy.state = "enough"
+      return show({ status = "Nothing to buy.", qty = 0, action = "Next", notes = {
+        writs == 0 and "None of its writs were bought." or ("In bags: %d. Enough."):format(s.held) } })
+    end
+  end
   if s.target then s.need = s.target - s.got end  -- partway through: what is left
   if not s.key then
     buy.state = "browse0"
@@ -319,6 +339,7 @@ function offer()
   local each = p.quantity > 0 and eachRange(p.low, p.high)
   if each then notes[#notes + 1] = ns.Color(GREY, each) end
   notes[#notes + 1] = wasNote(s, p.quantity > 0 and p.price)
+  notes[#notes + 1] = s.forNote
   notes[#notes + 1] = purse(p.price)
   if not s.lead and buy.leadStep then
     local leads = leadsToFill()
@@ -398,6 +419,7 @@ end
 --- buys it with the game's Buyout button.
 function handOff(s)
   buy.state = "handoff"
+  s.handedOff = true
   if s.lead then s.planned = s.want end
   local want = s.lead and s.want or s.need
   local p = plan(s, want)
@@ -825,6 +847,43 @@ function ns.BuyMaterials(list)
   if not dialog then makeDialog() end
   buy = { title = "Missing material", steps = steps, index = 1, bought = 0, waited = 0 }
   search(true)  -- the click in the Transfer menu
+end
+
+--- Buy what a writ recipient (a stop from ns.Stops) wants: one of each of their writs not
+--- handed in today and not in the bags, then the material for those and the writs held,
+--- less what the bags hold (writs asking for the same material share it).
+function ns.BuyForStop(stop)
+  if not canStart() then return end
+  local steps, materials, order = {}, {}, {}
+  for _, writ in ipairs(stop.writs) do
+    if ns.WritState(writ) ~= "done" then
+      local writStep
+      if ns.Count(writ.writItem) == 0 then
+        local name, icon = ns.Item(writ.writItem, "Writ: " .. writ.name)
+        writStep = { id = writ.writItem, name = name, icon = icon, need = 1 }
+        steps[#steps + 1] = writStep
+      end
+      local m = materials[writ.item]
+      if not m then
+        local name, icon = ns.Item(writ.item, writ.name)
+        m = { id = writ.item, name = name, icon = icon, held = ns.Count(writ.item), forWrits = {}, need = 0 }
+        materials[writ.item] = m
+        order[#order + 1] = m
+      end
+      m.forWrits[#m.forWrits + 1] = { step = writStep, count = writ.count }
+    end
+  end
+  for _, m in ipairs(order) do
+    local want = 0
+    for _, f in ipairs(m.forWrits) do want = want + f.count end
+    if want > m.held then steps[#steps + 1] = m end  -- else: the bags hold enough
+  end
+  if #steps == 0 then
+    return print(("%s: everything for %s is in the bags."):format(ns.TITLE, stop.npc.name))
+  end
+  if not dialog then makeDialog() end
+  buy = { title = stop.npc.name, steps = steps, index = 1, bought = 0, waited = 0 }
+  search(true)  -- the click on the recipient's row
 end
 
 --- Buy a writ or crate (the lead) and its material: the lead's count is set in the

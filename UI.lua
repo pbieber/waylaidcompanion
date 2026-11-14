@@ -1128,11 +1128,20 @@ pages.turnins = {
       else
         status = ("%d of %d open"):format(stop.open, #stop.writs)
       end
+      local tip = npc.name .. "\n" .. table.concat(names, "\n")
       entries[#entries + 1] = {
         icon = "Interface/Icons/INV_Misc_Note_01",
-        tip = npc.name .. "\n" .. table.concat(names, "\n") .. "\nClick: map.",
+        tip = function()
+          if ns.AuctionHouseOpen() and ns.CanBuy() then
+            return tip .. "\n|cff40d040Click: buy the writs open today and their material.|r"
+          end
+          return tip .. "\nClick: map."
+        end,
         cells = { npc.name, npc.zone, ("%.1f, %.1f"):format(npc.x, npc.y), status },
-        click = function() ns.OpenMap(npc.map) end,
+        -- At the auction house: buy this recipient's writs and material (Buy.lua).
+        click = function()
+          if ns.AuctionHouseOpen() and ns.CanBuy() then ns.BuyForStop(stop) else ns.OpenMap(npc.map) end
+        end,
       }
     end
     local known, total = ns.KnownTurnIns()

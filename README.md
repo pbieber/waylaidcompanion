@@ -10,7 +10,7 @@ Open the window with `/pwc`, the minimap button or the addon compartment.
 - **Craftsman's Writs**: every writ for your side, by tier, profession or cost: material, rep, cost (per 100 rep by default), owned, zone of the turn-in, today. Click a row: map (or, at the auction house, buy).
 - **Waylaid Crates**: every crate, by tier, profession or cost: the Merchant's Favor it pays, its cost with its cheapest material (per favor by default), owned. Each material under a crate shows the crate's cost filled with that one, and the cheapest is ticked. Crates of gathered goods (herbs, ore, textiles, curiosities) are white, crates of crafted goods (ingots, fabrics, parts) green, and a green crate pays twice the favor of a white one of its tier. A turn-in also pays half its favor in silver (5 favor, 2s 50c); that comes off the cost unless you untick **Count the turn-in's silver** under Options. At the auction house, click a crate's row to buy it.
 - **Fastcraft**: the crates in your bags, the materials in your bags that fill them, and how many crates that fills. **Craft** fills them all, one kind after the other (below).
-- **Turn-ins**: every turn-in, by continent. Also marked on the world map.
+- **Turn-ins**: every turn-in, by continent. Also marked on the world map. Click a writ recipient: map (or, at the auction house, buy their writs).
 - **Rewards**: what your faction's quartermasters sell, one list per profession, each with its own quartermaster, by standing, with its cost and whether you can buy it. Learned the first time you open each quartermaster's shop.
 - **Transfer**: mail, bank and buying for writs (below).
 - **Options**, at the foot of the menu: show writ and crate costs per reputation and per favor, or absolute; the scale (per 1, 10, 100 or 1000 rep or favor, each on its own); item names by tier colour or in their in-game rarity colour (the tier then shows in the Profession column's colour, or in the Tier column when sorted by profession); **Show both names**; and the window's **Style**, Modern (flat and dark) or Classic (the game's own frames), which changes after a reload.
@@ -42,10 +42,12 @@ To add a string someone shared, type `/pwc import`, paste it with Ctrl+V and pre
 
 ## Buying at the auction house
 
-With the auction house open, click a writ's or a crate's row. The buy window shows each item under **Paying** *price* **for:**. Nothing is bought without a click.
+With the auction house open, click a writ's or a crate's row, or a writ recipient on the Turn-ins page. The buy window shows each item under **Paying** *price* **for:**. Nothing is bought without a click.
 
 1. **Writ or crate.** Type an amount, or **Max** for all listed. Cheapest first; one click per writ.
 2. **Material.** Your writs or crates (in bags plus bought) times what each asks for, minus what your bags hold. For a crate it's the crate's cheapest material, and crates that other materials in your bags already fill need none.
+
+A writ recipient: one of each of their writs that you haven't handed in today and don't hold, then the material for those and the ones in your bags, minus what your bags hold. Material for a writ you skip isn't bought.
 
 Material sold in bulk: **Buy** gets the exact price, **Confirm** pays. **Skip** moves on, **Cancel** stops.
 
