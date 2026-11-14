@@ -123,18 +123,19 @@ function ns.BuildOptions(parent, width)
   choice("Scale", top - 28 - ROW, "repScale", scales("rep"))
   -- Beside the Cost boxes: whether a writ's cost is less its Coin Pouch's average silver.
   checkbox(top, "writPouch", "Account for coin pouch silver", function()
-    GameTooltip:SetText("Coin pouch silver", 1, 0.82, 0)
-    GameTooltip:AddLine("Each writ turn-in gives a Coin Pouch. Account for its silver in the "
+    GameTooltip:SetText("Coin pouch gold", 1, 0.82, 0)
+    GameTooltip:AddLine("Each writ turn-in gives a Coin Pouch. Account for its gold in the "
       .. "cheapest per rep calculation, at the average for the writ's tier.", 1, 1, 1, true)
     GameTooltip:AddLine(" ")
-    GameTooltip:AddDoubleLine("Tier: range", "used", 1, 0.82, 0, 1, 0.82, 0)
+    GameTooltip:AddDoubleLine("Tier: range", "average", 1, 0.82, 0, 1, 0.82, 0)
     local starred = false
     for tier, p in ipairs(ns.WRIT_POUCH) do
       local star = p.unconfirmed and " *" or ""
       starred = starred or p.unconfirmed
+      -- ns.Coins: the amounts with the game's gold, silver and copper icons.
       GameTooltip:AddDoubleLine(
-        ("%s: %s - %s%s"):format(ns.WRIT_TIERS[tier], ns.Money(p[1]), ns.Money(p[2]), star),
-        ns.Money(p[3]), 1, 1, 1, 1, 1, 1)
+        ("%s: %s - %s%s"):format(ns.WRIT_TIERS[tier], ns.Coins(p[1]), ns.Coins(p[2]), star),
+        ns.Coins(p[3]), 1, 1, 1, 1, 1, 1)
     end
     if starred then
       GameTooltip:AddLine(" ")
