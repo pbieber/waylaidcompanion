@@ -35,11 +35,21 @@ local ahOpen = false
 local scan = nil      -- the scan running, or nil
 local last = nil      -- { found, total, stopped } of the last scan, for the bar's text
 local listeners = {}
-local itemKeys = {}   -- the auction house's own key for each item a scan found
+-- The auction house's own key for each item a scan (or a purchase's search) found, with
+-- when: { key, at } (GetTime()).
+local itemKeys = {}
 
---- The auction house's key for an item, as the last scan saw it; nil if unseen.
-function ns.ItemKey(id)
-  return itemKeys[id]
+--- The auction house's key for an item, as the last search saw it; nil if unseen, or if
+--- seen more than maxAge seconds ago (when given).
+function ns.ItemKey(id, maxAge)
+  local seen = itemKeys[id]
+  if not seen then return nil end
+  if maxAge and GetTime and GetTime() - seen.at > maxAge then return nil end
+  return seen.key
+end
+
+local function noteKey(id, key)
+  if key then itemKeys[id] = { key = key, at = GetTime and GetTime() or 0 } end
 end
 
 local GetItemInfo = (C_Item and C_Item.GetItemInfo) or GetItemInfo
@@ -170,7 +180,7 @@ local function modernRead(results)
     local key = result.itemKey
     if key and key.itemID == item.id then
       keep(result.minPrice)
-      itemKeys[item.id] = key
+      noteKey(item.id, key)
     end
   end
   readOn(not AH.HasFullBrowseResults or AH.HasFullBrowseResults())
@@ -248,6 +258,18 @@ function ns.LastScanTime(scope)
     if seen and (not newest or seen[2] > newest) then newest = seen[2] end
   end
   return newest
+end
+
+--- Keep a price found outside a scan (buying searches the item again), as a scan would:
+--- copper per item, 0 when nothing is listed; with the auction house's key when known.
+function ns.RecordPrice(id, copper, key)
+  local prices = ns.ScannedPrices()
+  if prices and type(copper) == "number" then
+    prices[id] = { math.floor(copper + 0.5), time and time() or os.time() }
+  end
+  noteKey(id, key)
+  notify()
+  ns.Changed()
 end
 
 --- Start a scan of a scope ("writs", "crates", or nil for both); false and a reason when

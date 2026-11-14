@@ -48,6 +48,8 @@ With the auction house open, click a writ's row. The buy window shows each item 
 
 Material sold in bulk: **Buy** gets the exact price, **Confirm** pays. **Skip** moves on, **Cancel** stops.
 
+Prices more than 3 minutes old are searched again first: when an item was last scanned longer ago, and when you click **Buy** on an offer that has sat that long (it then shows the new price, and what it was). The lowest price each search finds replaces the item's price on the writs and crates pages.
+
 ## Transfer
 
 A *set* is one writ and its material.

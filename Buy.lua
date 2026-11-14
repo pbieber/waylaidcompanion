@@ -33,6 +33,11 @@ local PAY_TIMEOUT = 20  -- seconds to wait for a purchase to be confirmed
 -- purchase to be confirmed anyway: WoW Forever reports error 10 for purchases that go
 -- through.
 local ERROR_GRACE = 4
+-- Seconds after which what the auction house said about an item counts as old: an item
+-- last searched longer ago is searched again (a browse first, like Scan AH, for a fresh
+-- key) before it is offered, and a Buy clicked on an offer this old searches again and
+-- offers the new price instead of buying.
+local STALE = 180
 local ADDON = ...
 local GetItemInfo = (C_Item and C_Item.GetItemInfo) or GetItemInfo
 local RED, GREY = "ffff4040", "ff808080"
@@ -212,8 +217,10 @@ end
 --- the next frame, or (where the game wants a click for it) behind a Look up button.
 function search(fromClick)
   local s = step()
-  s.kind, s.auction, s.qty, s.queue, s.list = nil, nil, nil, nil, nil
-  s.key = ns.ItemKey and ns.ItemKey(s.id)  -- the auction house's own key, from a scan
+  s.kind, s.auction, s.qty, s.queue, s.list, s.searchedAt = nil, nil, nil, nil, nil, nil
+  -- The auction house's own key, from a scan or search in the last few minutes. An older
+  -- one goes unanswered or answers with old listings: then browse for the item again.
+  s.key = ns.ItemKey and ns.ItemKey(s.id, STALE)
   buy.waited, buy.seen, buy.late = 0, {}, false
   if s.material and buy.writStep then
     s.need = materialNeed()
@@ -224,12 +231,16 @@ function search(fromClick)
     end
   end
   if s.target then s.need = s.target - s.got end  -- partway through: what is left
+  if not s.key then
+    buy.state = "browse0"
+    return show({ status = "Searching...", qty = s.need })
+  end
   if fromClick then return sendSearch() end
   if searchNeedsClick then
     buy.state = "ask"
     return show({ status = "Click Look up.", qty = s.need, action = "Look up" })
   end
-  buy.state = s.key and "send" or "browse0"
+  buy.state = "send"
   show({ status = "Searching...", qty = s.need })
 end
 
@@ -259,6 +270,26 @@ local function eachRange(low, high)
   return ("%s to %s each"):format(coins(low), coins(high))
 end
 
+--- After an old offer was searched again: the price it showed, when it changed.
+local function wasNote(s, price)
+  if not s.was then return nil end
+  if price and math.floor(price) == math.floor(s.was) then
+    return ns.Color(GREY, "Searched again: same price.")
+  end
+  return ns.Color(RED, ("Searched again: was %s."):format(coins(s.was)))
+end
+
+--- Keep the lowest price a purchase's search found as the item's price, the one the
+--- pages compare (0: none listed).
+local function record(s, key)
+  local low
+  for _, l in ipairs(s.list or {}) do
+    if not low or l.each < low then low = l.each end
+  end
+  s.searchedAt = GetTime()
+  if ns.RecordPrice then ns.RecordPrice(s.id, low or 0, key) end
+end
+
 --- Offer the current step from its listings.
 function offer()
   local s = step()
@@ -277,6 +308,7 @@ function offer()
   end
   local each = p.quantity > 0 and eachRange(p.low, p.high)
   if each then notes[#notes + 1] = ns.Color(GREY, each) end
+  notes[#notes + 1] = wasNote(s, p.quantity > 0 and p.price)
   notes[#notes + 1] = purse(p.price)
   if not s.writ and buy.writStep then
     local writs = buy.writsHeld + (buy.writStep.planned or 0)
@@ -306,6 +338,7 @@ local function commodityResults()
       end
     end
   end
+  record(s, s.key)
   if s.listed == 0 then
     buy.state = "none"
     return show({ status = ns.Color(GREY, "None listed."), qty = s.need, action = "Skip" })
@@ -329,6 +362,7 @@ local function itemResults(itemKey)
     end
   end
   table.sort(s.list, function(a, b) return a.each < b.each end)
+  record(s, itemKey)
   if #s.list == 0 then
     buy.state = "none"
     return show({ status = ns.Color(GREY, "None listed with a buyout."), qty = s.need, action = "Skip" })
@@ -339,7 +373,7 @@ local function itemResults(itemKey)
     s.nextAuction, buy.state = a, "next"
     return show({ pay = a.each, qty = 1, action = ("Buy (%d of %d)"):format(s.got + 1, s.target),
       notes = { s.note, ns.Color(GREY, ("Bought %d of %d."):format(s.got, s.target)),
-        purse(a.each) } })
+        wasNote(s, a.each), purse(a.each) } })
   end
   if s.writ then s.want = math.min(s.want, s.listed) end
   if bidBlocked then return handOff(s) end
@@ -363,7 +397,7 @@ end
 --- Buy one from the cheapest listing. After it the auction house is searched again: the
 --- rest of the first search can't be bought any more ("item not found").
 local function payAuction(s, a)
-  s.auction, s.note = a, nil
+  s.auction, s.note, s.was = a, nil, nil
   buy.state, buy.waited, buy.seen, buy.error = "paying", 0, {}, nil
   -- The purchase first, the window after: nothing runs between the click and the
   -- protected call.
@@ -374,18 +408,32 @@ local function payAuction(s, a)
   end
 end
 
+--- The price an offer shows: what Buy (or Confirm) would pay.
+local function shownPrice(s, state)
+  if state == "offer" then return s.plan and s.plan.quantity > 0 and s.plan.price or nil end
+  if state == "confirm" then return s.total end
+  if state == "next" then return s.nextAuction and s.nextAuction.each end
+end
+
 --- The Buy (or Confirm, Look up, Next, Done) button.
 local function onBuy()
   local s = step()
   if not buy or not s then return end
   local state = buy.state
+  if (state == "offer" or state == "confirm" or state == "next") and s.searchedAt
+    and GetTime() - s.searchedAt > STALE then
+    -- The listings are minutes old: search again and offer what is listed now.
+    s.was = shownPrice(s, state)
+    release()
+    return search(true)
+  end
   if state == "none" or state == "failed" or state == "handoff" or state == "enough" then
     return nextStep(true)
   elseif state == "ask" then
     return sendSearch()
   elseif state == "offer" and s.kind == "commodity" then
     local p = s.plan
-    s.qty, s.estimate = p.quantity, p.price
+    s.qty, s.estimate, s.was = p.quantity, p.price, nil
     if s.writ then s.planned = s.want end
     buy.state, buy.waited, buy.holding, buy.seen = "quote", 0, true, {}
     C_AuctionHouse.StartCommoditiesPurchase(s.id, s.qty)
@@ -443,16 +491,24 @@ end
 --- uses (a key made with MakeItemKey can differ from it, and go unanswered).
 local function browseResults(results)
   local s = step()
+  local found
   for _, r in ipairs(results or {}) do
     if r.itemKey and r.itemKey.itemID == s.id then
-      s.key = r.itemKey
+      s.key, found = r.itemKey, r
       break
     end
   end
   if not s.key then
     if AH.HasFullBrowseResults and not AH.HasFullBrowseResults() then return end
+    if ns.RecordPrice then ns.RecordPrice(s.id, 0) end
     buy.state = "none"
     return show({ status = ns.Color(GREY, "None listed."), qty = s.need, action = "Skip" })
+  end
+  -- The price as a scan sees it; the search that follows refines it.
+  if ns.RecordPrice then ns.RecordPrice(s.id, found.minPrice, s.key) end
+  if searchNeedsClick then
+    buy.state = "ask"
+    return show({ status = "Click Look up.", qty = s.need, action = "Look up" })
   end
   buy.state, buy.waited, buy.seen = "send", 0, {}
 end
@@ -618,6 +674,7 @@ local function setWant(value)
   local s = step()
   if not buy or buy.state ~= "offer" or not s or not s.writ then return end
   s.want = math.max(0, math.min(math.floor(tonumber(value) or 0), s.listed or 0))
+  s.was = nil  -- another amount: the earlier price no longer compares
   offer()
 end
 
