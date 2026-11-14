@@ -751,7 +751,7 @@ local function crateCostTip()
   local what = "The crate and one material"
   if perFavor() then
     what = what .. " per " .. ns.ScaleLabel(ns.db.favorScale, "Merchant's Favor")
-      .. (ns.db.crateRefund ~= false and ", less the silver the turn-in pays back" or "")
+      .. (ns.db.crateRefund ~= false and ", less the quest reward silver" or "")
   end
   return what .. ", at AH prices (your scan or Auctionator, newest).\n"
     .. "On a crate: its cheapest material. On a material: that one.\n"
@@ -785,7 +785,7 @@ local function crateCostText(part, cost)
 end
 
 --- Tooltip lines for a crate filled with one bundle: what it costs, in all and by part,
---- the silver its turn-in pays back, and per favorScale favor.
+--- the silver its quest reward pays, and per favorScale favor.
 local function crateCostLines(lines, crate, cost, bundle, name)
   local part = cost.bundles[bundle] or {}
   costLines(lines, { { "Crate", cost.crate }, { name, part.material } })
@@ -793,7 +793,7 @@ local function crateCostLines(lines, crate, cost, bundle, name)
   if not ns.HasPrices() then return end
   local label = "Cost / " .. ns.ScaleLabel(ns.db.favorScale, "favor")
   if cost.refund > 0 and part.net then
-    lines[#lines + 1] = { "  Turn-in pays back", "-" .. ns.Coins(cost.refund) }
+    lines[#lines + 1] = { "  Quest reward", "-" .. ns.Coins(cost.refund) }
   end
   if not cost.favor then
     lines[#lines + 1] = { ns.Color(GOLD, label), ns.Color(GREY, "favor unknown") }

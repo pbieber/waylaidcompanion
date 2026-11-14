@@ -322,7 +322,7 @@ end
 --- cheapest of them that has a price.
 ---
 --- { crate (the empty crate's price), favor (the Merchant's Favor it pays), refund (the
----   money its turn-in pays back; 0 with that option off),
+---   quest reward silver; 0 with that option off),
 ---   bundles = { [bundle] = part }, cheapest (the cheapest bundle,
 ---   nil when none has a price), and the cheapest's part fields }
 ---
@@ -633,7 +633,7 @@ end
 -- ownerNames: 2 shows characters by first name and surname ("Show both names"), 1 by first name.
 -- writCost and crateCost: "per" shows a cost per repScale reputation or per favorScale
 -- Merchant's Favor, "total" what a writ or crate costs in all. crateRefund: a crate's cost
--- is less the silver its turn-in pays back. itemColor: "tier" colours
+-- is less its quest reward silver. itemColor: "tier" colours
 -- writ and crate names by tier, "rarity" in the game's colour for the item. theme: "modern"
 -- draws the windows flat and dark, "classic" with the game's own frames (Theme.lua).
 local DEFAULTS = { page = "overview", writSort = "level", crateSort = "level", pins = true, ownerNames = 1,

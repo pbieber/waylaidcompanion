@@ -3,7 +3,7 @@ The Options page: how the writs and crates pages show cost, and how characters a
 
   - Craftsman's Writs: cost per reputation or in all; per 1, 10, 100 or 1000 rep.
   - Waylaid Crates: cost per Merchant's Favor or in all; per 1, 10, 100 or 1000 favor;
-    whether the silver a turn-in pays back comes off the cost.
+    whether the quest reward silver comes off the cost.
   - Items: names coloured by writ or crate tier, or by the item's rarity as in game.
   - Characters: "Show both names" (first name and surname) in the Owned columns.
   - Window: the modern or the classic style (after a reload), and the columns' order.
@@ -98,19 +98,39 @@ function ns.BuildOptions(parent, width)
     { "total", "Absolute" },
   })
   choice("Scale", top - 28 - ROW, "favorScale", scales("favor"))
-  -- Beside the Cost boxes: whether a crate's cost is less the silver its turn-in pays back.
+  -- Beside the Cost boxes: whether a crate's cost is less its quest reward silver.
   local refund = CreateFrame("CheckButton", nil, f, "UICheckButtonTemplate")
   refund:SetSize(24, 24)
   refund:SetPoint("TOPLEFT", 10 + LABEL_W + 2 * (BUTTON_W + 4) + 12, top - 27)
   local refundLabel = refund:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
   refundLabel:SetPoint("LEFT", refund, "RIGHT", 2, 0)
-  refundLabel:SetText("Count the turn-in's silver")
+  refundLabel:SetText("Account for quest reward silver")
+  -- A "(?)" after the label; hover for what the box does.
+  local help = CreateFrame("Frame", nil, f)
+  help:SetPoint("LEFT", refundLabel, "RIGHT", 4, 0)
+  local helpText = help:CreateFontString(nil, "OVERLAY", "GameFontDisable")
+  helpText:SetPoint("CENTER")
+  helpText:SetText("(?)")
+  help:SetSize(helpText:GetStringWidth() + 4, 18)
+  help:EnableMouse(true)
+  help:SetScript("OnEnter", function(self)
+    helpText:SetTextColor(1, 1, 1)
+    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+    GameTooltip:SetText("Quest reward silver", 1, 0.82, 0)
+    GameTooltip:AddLine("Each crate turn-in also gives half its reputation as silver in quest "
+      .. "rewards. Account for this silver in the cheapest per favor calculation.", 1, 1, 1, true)
+    GameTooltip:Show()
+  end)
+  help:SetScript("OnLeave", function()
+    helpText:SetTextColor(0.5, 0.5, 0.5)
+    GameTooltip:Hide()
+  end)
   refund:SetScript("OnClick", function(self)
     ns.db.crateRefund = self:GetChecked() and true or false
   end)
   controls[#controls + 1] = { Refresh = function() refund:SetChecked(ns.db.crateRefund ~= false) end }
   note("Per favor: the crate and a material for that much of the Merchant's Favor it pays. "
-    .. "Absolute: what one filled crate costs. Ticked: less the silver its turn-in pays back.",
+    .. "Absolute: what one filled crate costs. Ticked: less the quest reward silver.",
     top - 28 - 2 * ROW)
 
   top = top - 28 - 2 * ROW - 34
