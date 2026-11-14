@@ -827,12 +827,17 @@ function ns.BuildTransfer(parent, width)
       if t.saved then
         local x = self.forget[i]
         if not x then
-          x = CreateFrame("Button", nil, f, "UIPanelCloseButton")
-          x:SetSize(20, 20)
+          x = ns.Skin.Cross(f, ns.Skin.Classic() and 20 or 18, 9)
           self.forget[i] = x
         end
         x:ClearAllPoints()
-        x:SetPoint("LEFT", b, "RIGHT", -4, 0)
+        if ns.Skin.Classic() then
+          x:SetPoint("LEFT", b, "RIGHT", -4, 0)
+        else
+          -- Inside the name's button, at its right end: the gap to the next is narrow.
+          x:SetPoint("RIGHT", b, "RIGHT", -2, 0)
+        end
+        x:SetFrameLevel(b:GetFrameLevel() + 2)
         x:SetScript("OnClick", function() ns.ForgetMailTarget(t.address) end)
         x:Show()
       end

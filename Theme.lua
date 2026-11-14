@@ -6,6 +6,7 @@ The look every window shares, in one of two styles (Options, "Style"):
 
   ns.Skin.Window  - a panel with a title and a close button
   ns.Skin.Button  - a button
+  ns.Skin.Cross   - a small button with a cross (close, remove)
   ns.Skin.Tab     - a boxed tab, brighter and underlined when it is the active one
   ns.Skin.Choice  - one of a row of choices, filled in the accent when it is the chosen one
   ns.Skin.Fill    - a flat colour texture
@@ -218,7 +219,28 @@ function Skin.Choice(parent, width, height)
   return b
 end
 
---- A window with `title` and a close button that hides it. Modern: a dark panel whose
+--- A small square button with a cross, for closing or removing: `size` square, the
+--- cross `mark` across (modern only). Modern: no box, red under the mouse. Classic: the
+--- game's red close button.
+function Skin.Cross(parent, size, mark)
+  if Skin.Classic() then
+    local b = CreateFrame("Button", nil, parent, "UIPanelCloseButton")
+    b:SetSize(size, size)
+    return b
+  end
+  local b = CreateFrame("Button", nil, parent)
+  b:SetSize(size, size)
+  local hover = Skin.Fill(b, { 0.8, 0.2, 0.2, 0.55 }, "HIGHLIGHT")
+  hover:SetAllPoints()
+  local cross = b:CreateTexture(nil, "ARTWORK")
+  cross:SetTexture("Interface/Buttons/UI-StopButton")
+  cross:SetSize(mark, mark)
+  cross:SetPoint("CENTER")
+  cross:SetVertexColor(0.85, 0.85, 0.85)
+  return b
+end
+
+--- A window with `title` and a close button that hides it (f.closeButton). Modern: a dark panel whose
 --- title strip has the logo. Classic: the game's own frame. The page starts 28 down.
 function Skin.Window(name, parent, width, height, title)
   if Skin.Classic() then
@@ -227,6 +249,7 @@ function Skin.Window(name, parent, width, height, title)
     f.title = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     f.title:SetPoint("TOP", 0, -5)
     f.title:SetText(title or "")
+    f.closeButton = f.CloseButton
     return f
   end
 
@@ -253,17 +276,10 @@ function Skin.Window(name, parent, width, height, title)
   f.title:SetPoint("LEFT", logo, "RIGHT", 7, 0)
   f.title:SetText(title or "")
 
-  local close = CreateFrame("Button", nil, f)
-  close:SetSize(Skin.TITLE_HEIGHT, Skin.TITLE_HEIGHT)
+  local close = Skin.Cross(f, Skin.TITLE_HEIGHT, 12)
   close:SetPoint("TOPRIGHT", -1, -1)
-  local hover = Skin.Fill(close, { 0.8, 0.2, 0.2, 0.55 }, "HIGHLIGHT")
-  hover:SetAllPoints()
-  local cross = close:CreateTexture(nil, "ARTWORK")
-  cross:SetTexture("Interface/Buttons/UI-StopButton")
-  cross:SetSize(12, 12)
-  cross:SetPoint("CENTER")
-  cross:SetVertexColor(0.85, 0.85, 0.85)
   close:SetScript("OnClick", function() f:Hide() end)
+  f.closeButton = close
 
   return f
 end

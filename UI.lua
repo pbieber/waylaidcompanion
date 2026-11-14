@@ -14,7 +14,7 @@ Each list page builds plain entries ({ header = ... } or { cells = {...} }) and 
 to one shared list, which draws them with pooled rows.
 ]]
 
-local _, ns = ...
+local ADDON, ns = ...
 if not CreateFrame then return end
 
 local GetItemInfo = (C_Item and C_Item.GetItemInfo) or GetItemInfo
@@ -1483,6 +1483,20 @@ local function build()
   window:SetScript("OnDragStop", window.StopMovingOrSizing)
   window:Hide()
   tinsert(UISpecialFrames, "PuggerWaylaidCompanionWindow")
+
+  -- The version, at the right of the title bar beside the close button.
+  local metadata = (C_AddOns and C_AddOns.GetAddOnMetadata) or GetAddOnMetadata
+  local version = metadata and metadata(ADDON, "Version")
+  if version then
+    local text = window:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    if window.closeButton then
+      text:SetPoint("RIGHT", window.closeButton, "LEFT", -6, 0)
+    else
+      text:SetPoint("TOPRIGHT", -34, -7)
+    end
+    text:SetText("v" .. version)
+    text:SetTextColor(unpack(Skin.color.dim))
+  end
 
   -- The menu, an entry a page. Modern: a darker column down the left, the page shown
   -- with the accent bar and a lighter fill. Classic: the game's buttons.
