@@ -158,6 +158,15 @@ def lua_item(item):
     return '{ %s }' % ', '.join(fields)
 
 
+def items(shop):
+    """A shop's items as a list, whether they came as a Lua array (a dict keyed 1..n)
+    or a list."""
+    found = shop.get('items') or []
+    if isinstance(found, dict):
+        found = [found[k] for k in sorted(found)]
+    return [i for i in found if isinstance(i, dict)]
+
+
 def merge_rewards(kept, shops):
     """Fold a source's { npc: shop } into kept, the newest list of each quartermaster
     winning. Returns how many it added or replaced."""
@@ -170,6 +179,13 @@ def merge_rewards(kept, shops):
             continue
         old = kept.get(npc)
         if old is None or (shop.get('time') or 0) > (old.get('time') or 0):
+            if old is not None:
+                # A tooltip still loading has no requirement line; the addon then keeps
+                # what an earlier visit saw (Rewards.lua), and so does this.
+                seen = {i.get('id'): i.get('standing') for i in items(old)}
+                for item in items(shop):
+                    if item.get('standing') is None and seen.get(item.get('id')) is not None:
+                        item['standing'] = seen[item.get('id')]
             kept[npc] = shop
             changed += 1
     # A list kept by name (before 0.5.1) that is also there by NPC id.

@@ -5,8 +5,10 @@ local _, ns = ...
 -- Places writs are handed in that Data/Writs.lua does not have:
 -- [NPC id, or "at:map:x:y" for a spot nobody has named yet] = { name, uiMapID, x, y, zone }
 ns.RECORDED_NPCS = {
+  [2663] = { "Narkk", 1434, 28.13, 74.43, "Stranglethorn Vale" },
   [2817] = { "Rigglefuzz", 1418, 42.41, 52.91, "Badlands" },
   [3536] = { "Kris Legace", 1424, 80.15, 38.91, "Hillsbrad Foothills" },
+  [4496] = { "Goblin Pit Boss", 1441, 79.9, 76.75, "Thousand Needles" },
   [4503] = { "Mudcrush Durtfeet", 1445, 35.16, 38.25, "Dustwallow Marsh" },
   [6176] = { "Bath'rah the Windwatcher", 1416, 80.51, 66.91, "Alterac Mountains" },
   [6548] = { "Magus Tirth", 1441, 78.29, 75.69, "Thousand Needles" },
@@ -14,7 +16,9 @@ ns.RECORDED_NPCS = {
   [7408] = { "Spigot Operator Luglunket", 1446, 52.48, 28.43, "Tanaris" },
   [9272] = { "Spark Nilminer", 1449, 43.5, 7.43, "Un'Goro Crater" },
   [10924] = { "Ivy Leafrunner", 1448, 50.95, 81.58, "Felwood" },
+  [11438] = { "Bibbly F'utzbuckle", 1443, 62.31, 38.96, "Desolace" },
   [11802] = { "Dendrite Starblaze", 1450, 56.22, 30.65, "Moonglade" },
+  [11805] = { "Jarund Stoutstrider", 1451, 82.06, 18.07, "Silithus" },
   [12029] = { "Narianna", 1450, 53.36, 42.72, "Moonglade" },
   [13717] = { "Centaur Pariah", 1443, 50.5, 86.67, "Desolace" },
   [14624] = { "Master Smith Burninate", 1427, 38.82, 28.5, "Searing Gorge" },
@@ -31,15 +35,16 @@ ns.RECORDED_NPCS = {
   [642320] = { "Battered Trunk", 1431, 26.27, 36.19, "Duskwood" },
   ["at:1418:619:542"] = { "Writ customer", 1418, 61.94, 54.24, "Badlands" },
   ["at:1419:518:356"] = { "Writ customer", 1419, 51.8, 35.66, "Blasted Lands" },
+  ["at:1422:657:761"] = { "Writ customer", 1422, 65.74, 76.1, "Western Plaguelands" },
   ["at:1425:269:485"] = { "Writ customer", 1425, 26.94, 48.57, "The Hinterlands" },
+  ["at:1428:124:316"] = { "Writ customer", 1428, 12.44, 31.65, "Burning Steppes" },
   ["at:1429:838:921"] = { "Writ customer", 1429, 83.88, 92.13, "Elwynn Forest" },
-  ["at:1434:281:744"] = { "Writ customer", 1434, 28.13, 74.43, "Stranglethorn Vale" },
+  ["at:1430:469:753"] = { "Writ customer", 1430, 46.99, 75.32, "Deadwind Pass" },
+  ["at:1432:430:865"] = { "Writ customer", 1432, 43.04, 86.51, "Loch Modan" },
   ["at:1440:647:801"] = { "Writ customer", 1440, 64.77, 80.15, "Ashenvale" },
-  ["at:1441:799:767"] = { "Writ customer", 1441, 79.9, 76.75, "Thousand Needles" },
   ["at:1443:388:271"] = { "Writ customer", 1443, 38.89, 27.16, "Desolace" },
   ["at:1443:623:389"] = { "Writ customer", 1443, 62.31, 38.96, "Desolace" },
   ["at:1450:517:325"] = { "Writ customer", 1450, 51.76, 32.58, "Moonglade" },
-  ["at:1451:820:180"] = { "Writ customer", 1451, 82.06, 18.07, "Silithus" },
 }
 
 -- [writ quest] = place
@@ -57,8 +62,8 @@ ns.RECORDED_WRITS = {
   [94239] = 257304, -- Fine Leather Pants
   [94240] = "at:1440:647:801", -- Herbalist's Gloves
   [94242] = 3536, -- Pilferer's Gloves
-  [94244] = "at:1434:281:744", -- Dark Leather Shoulders
-  [94245] = "at:1441:799:767", -- Barbaric Gloves
+  [94244] = 2663, -- Dark Leather Shoulders
+  [94245] = 4496, -- Barbaric Gloves
   [94246] = 8305, -- Red Whelp Gloves
   [94250] = "at:1429:838:921", -- Small Silk Pack
   [94251] = 6176, -- Phoenix Pants
@@ -76,10 +81,12 @@ ns.RECORDED_WRITS = {
   [94265] = 6568, -- Goblin Rocket Fuel
   [94266] = 262388, -- Elixir of Agility
   [94267] = 9272, -- Wildvine Potion
-  [94269] = "at:1443:623:389", -- Inlaid Mithril Cylinder
+  [94268] = "at:1432:430:865", -- Steel Plate Helm
+  [94269] = 11438, -- Inlaid Mithril Cylinder
   [94274] = 262284, -- Golden Scale Coif
   [94275] = 14624, -- Solid Sharpening Stone
   [94277] = 7408, -- Truesilver Rod
+  [94281] = "at:1443:623:389", -- Advanced Target Dummy
   [94282] = 262072, -- Craftsman's Monocle
   [94283] = 10924, -- Goblin Land Mine
   [94285] = 12029, -- Unstable Trigger
@@ -99,9 +106,13 @@ ns.RECORDED_WRITS = {
   [94309] = "at:1450:517:325", -- Star Belt
   [94310] = 262284, -- Black Mageweave Vest
   [94311] = 14634, -- Red Mageweave Pants
+  [94312] = 262379, -- Orange Martial Shirt
   [94313] = 6568, -- White Bandit Mask
   [94317] = "at:1419:518:356", -- Dreamless Sleep Potion
-  [94322] = "at:1451:820:180", -- Limited Invulnerability Potion
+  [94318] = "at:1428:124:316", -- Greater Fire Protection Potion
+  [94322] = 11805, -- Limited Invulnerability Potion
+  [94341] = "at:1422:657:761", -- Sniper Scope
+  [94355] = "at:1430:469:753", -- Tuxedo Jacket
 }
 
 -- Writs Data/Writs.lua limits to one side that players have had on the other:
@@ -585,7 +596,7 @@ ns.RECORDED_REWARDS = {
       { id = 21219, name = "Recipe: Sagefish Delight", price = 5000, quantity = 1, costs = {} },
       { id = 4536, name = "Shiny Red Apple", price = 25, quantity = 5, costs = {} },
     } },
-    [248199] = { npc = "Beneris", time = 1794529717, items = {
+    [248199] = { npc = "Beneris", time = 1794627679, items = {
       { id = 249479, name = "Formula: Enchant Weapon - Insight", price = 0, quantity = 1, costs = { { value = 45, name = "Merchant's Favor", icon = 135725 } } },
       { id = 249483, name = "Formula: Soulstaff", price = 0, quantity = 1, costs = { { value = 45, name = "Merchant's Favor", icon = 135725 } } },
       { id = 249485, name = "Formula: Orb of Souls", price = 0, quantity = 1, costs = { { value = 45, name = "Merchant's Favor", icon = 135725 } } },
@@ -741,7 +752,7 @@ ns.RECORDED_REWARDS = {
       { id = 252853, name = "Pattern: Prowler's Leather Bracers", price = 0, quantity = 1, standing = 6, costs = { { value = 90, name = "Merchant's Favor", icon = 135725 } } },
       { id = 271626, name = "Leatherworking Certification", price = 0, quantity = 1, costs = { { value = 1000, name = "Merchant's Favor", icon = 135725 } } },
     } },
-    [248202] = { npc = "Jim'bek", time = 1794564423, items = {
+    [248202] = { npc = "Jim'bek", time = 1794575396, items = {
       { id = 253892, name = "Pattern: Silky Boots", price = 0, quantity = 1, costs = { { value = 30, name = "Merchant's Favor", icon = 135725 } } },
       { id = 253898, name = "Pattern: Pearly Boots", price = 0, quantity = 1, costs = { { value = 30, name = "Merchant's Favor", icon = 135725 } } },
       { id = 253890, name = "Pattern: Pristine Boots", price = 0, quantity = 1, costs = { { value = 30, name = "Merchant's Favor", icon = 135725 } } },
@@ -811,7 +822,7 @@ ns.RECORDED_REWARDS = {
       { id = 254112, name = "Pattern: Fiery Sandals", price = 0, quantity = 1, standing = 6, costs = { { value = 90, name = "Merchant's Favor", icon = 135725 } } },
       { id = 271627, name = "Tailoring Certification", price = 0, quantity = 1, costs = { { value = 1000, name = "Merchant's Favor", icon = 135725 } } },
     } },
-    [256400] = { npc = "Okamache", time = 1794564395, items = {
+    [256400] = { npc = "Okamache", time = 1794575416, items = {
       { id = 262766, name = "Reins of the Pack Kodo", price = 0, quantity = 1, standing = 8, costs = { { value = 6000, name = "Merchant's Favor", icon = 135725 } } },
     } },
     [256672] = { npc = "Kurvelk Shadowhoof", time = 1794529835, items = {
