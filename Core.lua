@@ -224,6 +224,16 @@ function ns.ScannedPrices()
   return db.prices[scope]
 end
 
+--- When a scan of each list last ran to its end, for the auction house the player uses:
+--- { writs = when, crates = when }.
+function ns.ScanTimes()
+  local db = ns.db
+  if not db then return nil end
+  local scope = realm() .. "-" .. (ns.Side() or "?")
+  db.scanTimes[scope] = db.scanTimes[scope] or {}
+  return db.scanTimes[scope]
+end
+
 --- Whether there is anywhere to get prices: Auctionator, or a scan of our own.
 function ns.HasPrices()
   return auctionator() ~= nil or next(ns.ScannedPrices() or {}) ~= nil
@@ -686,6 +696,7 @@ events:SetScript("OnEvent", function(_, event, arg1)
     db.bags = db.bags or {}
     db.bank = db.bank or {}
     db.prices = db.prices or {}
+    db.scanTimes = db.scanTimes or {}
     -- Folded groups on the list pages, by "page:sort:group".
     db.collapsed = db.collapsed or {}
     -- The order a page's columns were dragged into, by page: { [page] = { 3, 1, 2, ... } }.

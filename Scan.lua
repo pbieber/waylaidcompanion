@@ -120,6 +120,12 @@ end
 
 local function finish(stopped)
   if not scan then return end
+  local times = not stopped and ns.ScanTimes()
+  if times then
+    local now = time and time() or os.time()
+    if scan.scope ~= "crates" then times.writs = now end
+    if scan.scope ~= "writs" then times.crates = now end
+  end
   last = { found = scan.found, total = #scan.items, done = scan.index - 1, stopped = stopped }
   print(("%s: scan %s. %d of %d listed."):format(ns.TITLE,
     stopped and "stopped" or "done", scan.found, scan.index - 1))
@@ -249,15 +255,23 @@ driver:SetScript("OnUpdate", function(self, elapsed)
   end
 end)
 
---- When the newest price our own scans found was seen, among a scope's items (see
---- scopeItems; nil for all); nil before the first scan.
+--- When a scan of a scope's items ("writs", "crates"; nil for both: the older) last ran
+--- to its end; nil before the first. A scan of the other list doesn't count, though the
+--- lists share materials. Before scans were timed per list: when the oldest price among
+--- the scope's items was seen.
 function ns.LastScanTime(scope)
-  local prices, newest = ns.ScannedPrices() or {}, nil
+  local times = ns.ScanTimes() or {}
+  if scope then
+    if times[scope] then return times[scope] end
+  elseif times.writs and times.crates then
+    return math.min(times.writs, times.crates)
+  end
+  local prices, oldest = ns.ScannedPrices() or {}, nil
   for _, item in ipairs(scopeItems(scope)) do
     local seen = prices[item.id]
-    if seen and (not newest or seen[2] > newest) then newest = seen[2] end
+    if seen and (not oldest or seen[2] < oldest) then oldest = seen[2] end
   end
-  return newest
+  return oldest
 end
 
 --- Keep a price found outside a scan (buying searches the item again), as a scan would:
