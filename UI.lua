@@ -408,10 +408,12 @@ local STATE_TEXT = {
 }
 
 --- What a writ's Cost column shows, as the Options page has it: the cost per repScale
---- reputation, or the writ and its material in all. nil when nothing has a price.
+--- reputation, or the writ and its material in all, either less the coin pouch's average
+--- silver while that option is on (below 0 when the pouch pays more). nil when nothing has
+--- a price.
 local function writValue(cost)
   if not cost.perRep then return nil end
-  if ns.db.writCost == "total" then return cost.total end
+  if ns.db.writCost == "total" then return cost.net end
   return cost.perRep * ns.db.repScale
 end
 
@@ -427,17 +429,22 @@ local function costText(cost)
   if not ns.HasPrices() then return "" end
   local value = writValue(cost)
   if not value then return ns.Color(GREY, "no price") end
-  local text = ns.Coins(value)
+  local text = ns.SignedCoins(value)
   if cost.partial then text = text .. ns.Color(ORANGE, " + ?") end
   if cost.old then text = text .. ns.Color(ORANGE, " *") end
   return text
 end
 
---- Tooltip lines for a writ's cost per reputation, and what is wrong with it if anything.
-local function perRepLines(lines, cost, itemName)
+--- Tooltip lines for a writ's cost per reputation, less its coin pouch's average silver
+--- while that option is on, and what is wrong with it if anything.
+local function perRepLines(lines, cost, itemName, tier)
   if not cost.perRep then return end
+  if cost.pouch > 0 then
+    lines[#lines + 1] = { "  Coin pouch (average)",
+      "-" .. ns.Coins(cost.pouch) .. (ns.WRIT_POUCH[tier].unconfirmed and " *" or "") }
+  end
   lines[#lines + 1] = { ns.Color(GOLD, "Cost / " .. ns.ScaleLabel(ns.db.repScale, "rep")),
-    ns.Coins(cost.perRep * ns.db.repScale) .. (cost.partial and " + ?" or "") }
+    ns.SignedCoins(cost.perRep * ns.db.repScale) .. (cost.partial and " + ?" or "") }
   if cost.partial then
     lines[#lines + 1] = { ns.Color(ORANGE, ("  No price: %s"):format(cost.writ and itemName or "writ")) }
   end
@@ -603,7 +610,7 @@ local function writEntry(writ, sort, cost)
       local lines = { { " " } }
       local now = ns.WritCost(writ)
       costLines(lines, { { "Writ", now.writ }, { name, now.material } })
-      perRepLines(lines, now, itemName)
+      perRepLines(lines, now, itemName, writ.tier)
       lines[#lines + 1] = { " " }
       holdingLines(lines, "Owned: writ", writ.writItem)
       holdingLines(lines, "Owned: " .. itemName, writ.item, writ.count)
@@ -635,6 +642,7 @@ local WRIT_COLUMNS = { 0, 195, 290, 328, 432, 548, 655, 710 }
 local function writCostTip()
   local what = ns.db.writCost == "total" and "Writ and material"
     or ("Writ and material per " .. ns.ScaleLabel(ns.db.repScale, "rep"))
+  if ns.db.writPouch ~= false then what = what .. ", less the coin pouch's average silver" end
   return what .. ", at AH prices (your scan or Auctionator, newest).\n"
     .. "+ ?  a part has no price.\n"
     .. ("*  a price is %d+ days old.\n"):format(ns.OLD_PRICE_DAYS)

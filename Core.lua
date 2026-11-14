@@ -15,6 +15,15 @@ ns.ICON = "Interface/AddOns/PuggerWaylaidCompanion/Media/pugger"
 -- Writ tiers by index, as Data/Writs.lua stores them.
 ns.WRIT_TIERS = { "Journeyman", "Expert", "Artisan" }
 ns.WRIT_REP = { 75, 125, 200 }
+-- Each writ turn-in gives a Coin Pouch (one item per tier, all named the same). What a pouch
+-- pays, in copper, by tier: { low, high, average }. Rounded from 75 pouches opened in
+-- November 2026 (Journeyman 20.62s to 48.81s, Expert 54.96s to 99.97s); the Artisan figures
+-- rest on one pouch (1g 58s 78c) and are not confirmed yet.
+ns.WRIT_POUCH = {
+  { 2000, 5000, 3500 },
+  { 5000, 10000, 7500 },
+  { 10000, 20000, 15000, unconfirmed = true },
+}
 -- Crate tiers have one more rung below.
 ns.CRATE_TIERS = { "Apprentice", "Journeyman", "Expert", "Artisan" }
 
@@ -297,10 +306,19 @@ function ns.Money(copper)
   return table.concat(parts, " ")
 end
 
+--- ns.Coins, with a green "-" in front of an amount below 0: a writ whose Coin Pouch pays
+--- more than the writ and its material cost.
+function ns.SignedCoins(copper)
+  if copper and copper <= -0.5 then return ns.Color("ff40d040", "-") .. ns.Coins(-copper) end
+  return ns.Coins(math.max(0, copper or 0))
+end
+
 --- What a writ costs to do from nothing: { writ, each, material (each x count), total
 --- (of the parts with a price), partial (a part has none), age (days since the oldest
 --- of its prices was seen, nil when unknown), old (that is OLD_PRICE_DAYS or more),
---- perRep (total for each point of reputation; nil when no part has a price) }.
+--- pouch (the Coin Pouch's average silver; 0 with that option off), net (total less the
+--- pouch, below 0 when the pouch pays more; nil when no part has a price),
+--- perRep (net for each point of reputation; nil when no part has a price) }.
 function ns.WritCost(writ)
   local paper, paperAge = ns.PriceInfo(writ.writItem)
   local each, eachAge = ns.PriceInfo(writ.item)
@@ -310,11 +328,14 @@ function ns.WritCost(writ)
     if days and (not age or days > age) then age = days end
   end
   local total = (paper or 0) + (material or 0)
+  local pouch = (not ns.db or ns.db.writPouch ~= false) and ns.WRIT_POUCH[writ.tier][3] or 0
+  local net = (paper or material) and total - pouch or nil
   return {
     writ = paper, each = each, material = material,
     total = total, partial = not (paper and material),
     age = age, old = age ~= nil and age >= ns.OLD_PRICE_DAYS,
-    perRep = (paper or material) and total / ns.WRIT_REP[writ.tier] or nil,
+    pouch = pouch, net = net,
+    perRep = net and net / ns.WRIT_REP[writ.tier] or nil,
   }
 end
 
@@ -633,11 +654,13 @@ end
 -- ownerNames: 2 shows characters by first name and surname ("Show both names"), 1 by first name.
 -- writCost and crateCost: "per" shows a cost per repScale reputation or per favorScale
 -- Merchant's Favor, "total" what a writ or crate costs in all. crateRefund: a crate's cost
--- is less its quest reward silver. itemColor: "tier" colours
+-- is less its quest reward silver. writPouch: a writ's cost is less its Coin Pouch's
+-- average silver (ns.WRIT_POUCH). itemColor: "tier" colours
 -- writ and crate names by tier, "rarity" in the game's colour for the item. theme: "modern"
 -- draws the windows flat and dark, "classic" with the game's own frames (Theme.lua).
 local DEFAULTS = { page = "overview", writSort = "level", crateSort = "level", pins = true, ownerNames = 1,
-  writCost = "per", crateCost = "per", repScale = 100, favorScale = 1, crateRefund = true, itemColor = "tier",
+  writCost = "per", crateCost = "per", repScale = 100, favorScale = 1, crateRefund = true, writPouch = true,
+  itemColor = "tier",
   theme = "modern", mailWhat = "writs" }
 
 local listeners = {}
