@@ -57,7 +57,7 @@ Prices more than 3 minutes old are searched again first: when an item was last s
 
 On the crates page, click a material under a crate. The window says how many of the crates in your bags it fills. **Fill a crate** uses a crate and picks the material for you, which starts the cast; click again after each cast, one click per crate. Not in combat.
 
-To fill every crate in your bags, open **Fastcraft** and click **Craft**. The same window opens on the first crate your bags can fill; when that kind is done it moves on to the next by itself, until nothing is left to fill. It is still one click per crate. Where a crate's first material runs short, the next one in your bags fills the rest.
+To fill every crate in your bags, open **Fastcraft** and click **Craft**. The same window opens on the first crate your bags can fill; when that kind is done it moves on to the next by itself, until nothing is left to fill. It is still one click per crate. Click a crate in **Fastcraft** to start from that one: it fills down the list, then goes back to the top for the crates above it. Where a crate's first material runs short, the next one in your bags fills the rest.
 
 For a crafted material (a bar, a bolt, a cured hide, an engineering part) the window also lists the recipes that make enough of it for the crates in your bags, what it is made of first; set **Craft for crates** to craft for more or fewer. Nothing is crafted without a click.
 

@@ -71,11 +71,14 @@ function ns.CraftPlan(item, want, known, count)
 end
 
 --- The crates in the bags that the bags can fill, and with what: { { crate, bundle,
---- fills }, ... } in the crates' own order. A crate takes one material; when one runs
---- short for every crate of a kind, the next material fills the rest.
-function ns.FillPlan(count)
-  local plan = {}
-  for _, crate in ipairs(ns.crates) do
+--- fills }, ... } in the crates' own order, or from the `start`th crate down and then
+--- round from the top. A crate takes one material; when one runs short for every crate
+--- of a kind, the next fills the rest.
+function ns.FillPlan(count, start)
+  local plan, all = {}, ns.crates
+  start = (start and start >= 1 and start <= #all) and start or 1
+  for i = 0, #all - 1 do
+    local crate = all[(start - 1 + i) % #all + 1]
     local left = count(crate.item) or 0
     for _, bundle in ipairs(crate.bundles) do
       if left <= 0 then break end
@@ -207,7 +210,7 @@ local function refresh()
   -- A run over every crate: whatever is next to fill, until nothing is.
   local left
   if job.run then
-    local plan = ns.FillPlan(ns.Count)
+    local plan = ns.FillPlan(ns.Count, job.start)
     left = 0
     for _, p in ipairs(plan) do left = left + p.fills end
     if plan[1] then job.crate, job.bundle = plan[1].crate, plan[1].bundle end
@@ -459,19 +462,24 @@ function ns.Craft(crate, bundle)
 end
 
 --- Open the window on a run over every crate in the bags that the bags can fill: one
---- kind after the other, a click a crate.
-function ns.FillAll()
+--- kind after the other, a click a crate. With `from` (a crate), from that one down the
+--- list, then round from the top for those above it.
+function ns.FillAll(from)
   if inCombat() then
     print(ns.TITLE .. ": not in combat.")
     return
   end
-  local first = ns.FillPlan(ns.Count)[1]
+  local start
+  for i, crate in ipairs(ns.crates) do
+    if crate == from then start = i end
+  end
+  local first = ns.FillPlan(ns.Count, start)[1]
   if not first then
     print(ns.TITLE .. ": no crate in the bags that the bags can fill.")
     return
   end
   if not dialog then makeDialog() end
-  job = { run = true, crate = first.crate, bundle = first.bundle, crates = 1 }
+  job = { run = true, start = start, crate = first.crate, bundle = first.bundle, crates = 1 }
   blocked = false
   dialog:Show()
   refresh()

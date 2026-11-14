@@ -1033,6 +1033,8 @@ pages.fastcraft = {
         entries[#entries + 1] = {
           icon = icon,
           item = crate.item,
+          tip = "Click: fill from this crate down the list, then the ones above.",
+          click = function() ns.FillAll(crate) end,
           cells = {
             itemColored(crate.item, ns.CRATE_COLOR[crate.tier], "Waylaid Crate: " .. crate.name),
             tostring(held),
