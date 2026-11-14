@@ -1,10 +1,11 @@
 --[[
 Markers on the world map: one for each NPC that takes Craftsman's Writs, and one for the
 player's crate camp. Hovering a marker lists the writs handed in there and whether each
-is still available today: Done, Ready (writ and material in bags), Writ with a tick and
-Material with a cross (or the other way round) for half of it in bags, or Open. A writ not
-in the bags but on the account (bank, mail, another character) gets the writ's and the
-material's counts underneath, by character, as on the writs page.
+is still available today: Done, Ready with a tick (writ and material in bags), Writ with a
+tick and Material with a cross (or the other way round) for half of it in bags, or Open.
+When what the bags lack (the writ, or for a writ in bags its material) is elsewhere on the
+account (bank, mail, another character), the writ's and the material's counts follow
+underneath, by character, as on the writs page.
 
 The markers are plain frames on the map's canvas, placed by hand, so nothing here goes
 through the map's own pin pools (which want XML templates and are easy to taint). On a
@@ -27,7 +28,7 @@ local CROSS = "|TInterface/RaidFrame/ReadyCheck-NotReady:12:12|t"
 local function writTag(writ)
   local state = ns.WritState(writ)
   if state == "done" then return "Done", 0.5, 0.5, 0.5 end
-  if state == "ready" then return "Ready", 0.25, 1, 0.25 end
+  if state == "ready" then return "Ready " .. TICK, 0.25, 1, 0.25 end
   local enough = ns.Count(writ.item) >= writ.count
   if state == "holding" then return "Writ " .. TICK .. "  Material " .. CROSS, 1, 0.82, 0 end
   if enough then return "Writ " .. CROSS .. "  Material " .. TICK, 1, 0.82, 0 end
@@ -83,9 +84,11 @@ local function showTooltip(pin)
       GameTooltip:AddDoubleLine(
         ns.Color(ns.WRIT_COLOR[writ.tier], name) .. ns.Color("ff808080", "  " .. ns.WRIT_TIERS[writ.tier]),
         right, 1, 1, 1, r, g, b)
-      -- Not in the bags but somewhere on the account: who has the writ and its material.
-      if ns.HoldingLines and ns.WritState(writ) ~= "done" and ns.Count(writ.writItem) == 0
-          and ns.AccountHoldings(writ.writItem).total > 0 then
+      -- What the bags lack (the writ, or with the writ in bags its material) is somewhere
+      -- else on the account: who has the writ and its material.
+      local state = ns.WritState(writ)
+      local lacking = (state == "open" and writ.writItem) or (state == "holding" and writ.item)
+      if ns.HoldingLines and lacking and ns.AccountHoldings(lacking).total > ns.Count(lacking) then
         local lines = {}
         ns.HoldingLines(lines, "Writ", writ.writItem, nil, "    ")
         ns.HoldingLines(lines, itemName, writ.item, writ.count, "    ")
