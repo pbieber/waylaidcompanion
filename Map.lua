@@ -1,7 +1,10 @@
 --[[
 Markers on the world map: one for each NPC that takes Craftsman's Writs, and one for the
 player's crate camp. Hovering a marker lists the writs handed in there and whether each
-is still available today.
+is still available today: Done, Ready (writ and material in bags), Writ with a tick and
+Material with a cross (or the other way round) for half of it in bags, or Open. A writ not
+in the bags but on the account (bank, mail, another character) gets the writ's and the
+material's counts underneath, by character, as on the writs page.
 
 The markers are plain frames on the map's canvas, placed by hand, so nothing here goes
 through the map's own pin pools (which want XML templates and are easy to taint). On a
@@ -16,6 +19,20 @@ local SIZE = 22
 local CONTINENT = 2 -- Enum.UIMapType.Continent
 
 local pins = {}
+
+local TICK = "|TInterface/RaidFrame/ReadyCheck-Ready:12:12|t"
+local CROSS = "|TInterface/RaidFrame/ReadyCheck-NotReady:12:12|t"
+
+--- A writ's tag on the map: its text and colour.
+local function writTag(writ)
+  local state = ns.WritState(writ)
+  if state == "done" then return "Done", 0.5, 0.5, 0.5 end
+  if state == "ready" then return "Ready", 0.25, 1, 0.25 end
+  local enough = ns.Count(writ.item) >= writ.count
+  if state == "holding" then return "Writ " .. TICK .. "  Material " .. CROSS, 1, 0.82, 0 end
+  if enough then return "Writ " .. CROSS .. "  Material " .. TICK, 1, 0.82, 0 end
+  return "Open", 0.25, 0.82, 0.25
+end
 
 local function canvas()
   if WorldMapFrame.GetCanvas then return WorldMapFrame:GetCanvas() end
@@ -60,20 +77,26 @@ local function showTooltip(pin)
     end
     GameTooltip:AddLine(" ")
     for _, writ in ipairs(stop.writs) do
-      local state = ns.WritState(writ)
-      local right, r, g, b = "Open", 0.25, 0.82, 0.25
-      if state == "done" then
-        right, r, g, b = "Done", 0.5, 0.5, 0.5
-      elseif state == "ready" then
-        right, r, g, b = "Ready", 0.25, 1, 0.25
-      elseif state == "holding" then
-        right, r, g, b = "In bags", 1, 0.82, 0
-      end
-      local name = ns.Item(writ.item, writ.name)
-      if writ.count > 1 then name = writ.count .. " x " .. name end
+      local right, r, g, b = writTag(writ)
+      local itemName = ns.Item(writ.item, writ.name)
+      local name = writ.count > 1 and (writ.count .. " x " .. itemName) or itemName
       GameTooltip:AddDoubleLine(
         ns.Color(ns.WRIT_COLOR[writ.tier], name) .. ns.Color("ff808080", "  " .. ns.WRIT_TIERS[writ.tier]),
         right, 1, 1, 1, r, g, b)
+      -- Not in the bags but somewhere on the account: who has the writ and its material.
+      if ns.HoldingLines and ns.WritState(writ) ~= "done" and ns.Count(writ.writItem) == 0
+          and ns.AccountHoldings(writ.writItem).total > 0 then
+        local lines = {}
+        ns.HoldingLines(lines, "Writ", writ.writItem, nil, "    ")
+        ns.HoldingLines(lines, itemName, writ.item, writ.count, "    ")
+        for _, line in ipairs(lines) do
+          if line[2] then
+            GameTooltip:AddDoubleLine(line[1], line[2], 1, 1, 1, 1, 1, 1)
+          else
+            GameTooltip:AddLine(line[1], 1, 1, 1)
+          end
+        end
+      end
     end
   end
   GameTooltip:Show()

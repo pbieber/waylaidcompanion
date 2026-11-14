@@ -467,19 +467,21 @@ local function costLines(lines, parts)
 end
 
 --- Tooltip lines for how many of an item the account has (of `need`, when given), and
---- which character has them where.
-local function holdingLines(lines, label, id, need)
+--- which character has them where. `indent` goes before each line (the map's tooltip).
+local function holdingLines(lines, label, id, need, indent)
+  indent = indent or ""
   local held = ns.AccountHoldings(id)
   local count = tostring(held.total)
   if need then
     count = ns.Color(held.total >= need and GREEN or (held.total > 0 and GOLD or GREY), ("%d / %d"):format(held.total, need))
   end
-  lines[#lines + 1] = { ns.Color(GOLD, label), count }
+  lines[#lines + 1] = { indent .. ns.Color(GOLD, label), count }
   for _, h in ipairs(held.chars) do
-    lines[#lines + 1] = { ns.Color(GREY, ("  %s: bags %d, bank %d, mail %s"):format(h.name,
+    lines[#lines + 1] = { indent .. ns.Color(GREY, ("  %s: bags %d, bank %d, mail %s"):format(h.name,
       h.bags, h.bank, h.mailSeen and tostring(h.mail) or "?")) }
   end
 end
+ns.HoldingLines = holdingLines  -- also the map's tooltip (Map.lua)
 
 --- The Owned column: how many writs the account has. Those on this character show as a
 --- bare number; of the other characters the first is named with its count, or the first
