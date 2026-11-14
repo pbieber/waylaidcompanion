@@ -379,14 +379,14 @@ end
 -- Mail
 -- ---------------------------------------------------------------------------
 
-local mail = nil  -- { to, name, mails = { { pieces, sets } }, i, state, waited }
+local mail = nil  -- { to, name, prefix, mails = { { pieces, sets } }, i, state, waited }
 local window
 
---- Sets in the bags (one per writ, when there is material enough for it), packed into
---- mails: { { pieces = { moves }, sets = { writ names } }, ... }. The attachments are
---- worked out from the stacks as they are, largest first, the way the mover takes them.
-function ns.PlanMail()
-  local pool = {}  -- itemID -> stack counts left, largest first
+--- The bags' stacks as a plan uses them up: total(id) what is left of an item, and
+--- take(id, count) the attachments `count` takes, one per stack used, largest first (the
+--- way the mover takes them).
+local function bagPool()
+  local pool = {}  -- itemID -> stack counts left
   local function stackList(id)
     if not pool[id] then
       pool[id] = {}
@@ -399,9 +399,9 @@ function ns.PlanMail()
     for _, c in ipairs(stackList(id)) do n = n + c end
     return n
   end
-  local function take(id, count)  -- the attachments `count` takes: one per stack used
+  local function take(id, count)
     local pieces, list = {}, stackList(id)
-    while count > 0 do
+    while count > 0 and #list > 0 do
       table.sort(list, function(a, b) return a > b end)
       local n = math.min(count, list[1])
       pieces[#pieces + 1] = n
@@ -410,30 +410,100 @@ function ns.PlanMail()
     end
     return pieces
   end
+  return total, take
+end
 
+--- Attachments for `count` of an item from the bags: one move per stack used.
+local function attach(take, pieces, id, count, isLead)
+  for _, n in ipairs(take(id, count)) do
+    pieces[#pieces + 1] = { id = id, left = n, from = "bags", to = "mail", writ = isLead }
+  end
+end
+
+--- Groups of attachments ({ name, pieces }) packed into mails of at most MAX_ATTACH:
+--- { { pieces = { moves }, sets = { names } }, ... }. A group starts a new mail when it
+--- won't fit in the one being packed; one too big for any mail runs on into the next.
+local function pack(groups)
   local mails, current = {}, nil
-  for _, writ in ipairs(writKinds()) do
-    if total(writ.writItem) >= 1 and total(writ.item) >= writ.count then
-      local pieces = { { id = writ.writItem, left = 1, from = "bags", to = "mail", writ = true } }
-      take(writ.writItem, 1)
-      for _, n in ipairs(take(writ.item, writ.count)) do
-        pieces[#pieces + 1] = { id = writ.item, left = n, from = "bags", to = "mail" }
-      end
-      if not current or #current.pieces + #pieces > MAX_ATTACH then
-        current = { pieces = {}, sets = {} }
-        mails[#mails + 1] = current
-      end
-      for _, p in ipairs(pieces) do
-        if #current.pieces >= MAX_ATTACH then  -- a set too big for one mail goes on
-          current = { pieces = {}, sets = {} }
-          mails[#mails + 1] = current
-        end
-        current.pieces[#current.pieces + 1] = p
-      end
-      current.sets[#current.sets + 1] = writ.name
+  local function newMail()
+    current = { pieces = {}, sets = {} }
+    mails[#mails + 1] = current
+  end
+  for _, g in ipairs(groups) do
+    if not current or #current.pieces + #g.pieces > MAX_ATTACH then newMail() end
+    for _, p in ipairs(g.pieces) do
+      if #current.pieces >= MAX_ATTACH then newMail() end
+      current.pieces[#current.pieces + 1] = p
     end
+    current.sets[#current.sets + 1] = g.name
   end
   return mails
+end
+
+--- Sets in the bags (one per writ, when there is material enough for it), packed into
+--- mails (see pack).
+function ns.PlanMail()
+  local total, take = bagPool()
+  local groups = {}
+  for _, writ in ipairs(writKinds()) do
+    if total(writ.writItem) >= 1 and total(writ.item) >= writ.count then
+      local pieces = {}
+      attach(take, pieces, writ.writItem, 1, true)
+      attach(take, pieces, writ.item, writ.count)
+      groups[#groups + 1] = { name = writ.name, pieces = pieces }
+    end
+  end
+  return pack(groups)
+end
+
+--- Every unfilled crate in the bags, each kind with the material in the bags to fill
+--- them: its materials cheapest first by the prices the crates page shows (the last AH
+--- scan), the next one where the cheapest runs short; those without a price last. A
+--- crate the bags hold no material for goes alone. Packed into mails (see pack); each
+--- mail's sets name "3 x Apprentice Ore", and the plan also says { crates, filled }.
+function ns.PlanCrateMail()
+  local total, take = bagPool()
+  local groups, crates, filled = {}, 0, 0
+  for _, crate in ipairs(ns.crates) do
+    local n = total(crate.item)
+    if n > 0 then
+      local pieces = {}
+      attach(take, pieces, crate.item, n, true)
+      local cost = ns.CrateCost(crate)
+      local bundles = {}
+      for _, b in ipairs(crate.bundles) do bundles[#bundles + 1] = b end
+      table.sort(bundles, function(a, b)
+        local x, y = cost.bundles[a].each, cost.bundles[b].each
+        if (x == nil) ~= (y == nil) then return x ~= nil end
+        if x and y and x ~= y then return x < y end
+        return a.count < b.count  -- unpriced: the one that takes fewer first
+      end)
+      local left = n
+      for _, b in ipairs(bundles) do
+        if left <= 0 then break end
+        local fills = math.min(left, math.floor(total(b.item) / b.count))
+        if fills > 0 then
+          attach(take, pieces, b.item, fills * b.count)
+          left = left - fills
+        end
+      end
+      crates, filled = crates + n, filled + (n - left)
+      groups[#groups + 1] = { name = ("%d x %s"):format(n, crate.name), pieces = pieces }
+    end
+  end
+  local mails = pack(groups)
+  mails.crates, mails.filled = crates, filled
+  return mails
+end
+
+--- What the Transfer page mails, as chosen there: "writs" (one set of each) or "crates".
+local function mailWhat()
+  return ns.db and ns.db.mailWhat == "crates" and "crates" or "writs"
+end
+
+function ns.SetMailWhat(what)
+  ns.db.mailWhat = what
+  ns.Changed()
 end
 
 local function money(copper)
@@ -469,7 +539,7 @@ end
 local attachNext
 
 local function subjectOf(m)
-  local subject = "Writs: " .. table.concat(m.sets, ", ")
+  local subject = mail.prefix .. table.concat(m.sets, ", ")
   if #subject > 60 then subject = subject:sub(1, 57) .. "..." end
   return subject
 end
@@ -685,7 +755,8 @@ function ns.MailSetCount()
   return n
 end
 
---- Mail one set of each writ in the bags to "Name Surname".
+--- Mail to "Name Surname" what the Transfer page has chosen: one set of each writ in the
+--- bags, or every crate with the material to fill it.
 function ns.MailSets(address)
   address = tidy(address)
   if address == "" then return say("Enter a name.") end
@@ -695,10 +766,12 @@ function ns.MailSets(address)
     return say("Open the Send Mail tab.")
   end
   if attachments() > 0 then return say("Clear the mail's attachments.") end
-  local mails = ns.PlanMail()
-  if #mails == 0 then return say("No full set in bags.") end
+  local crates = mailWhat() == "crates"
+  local mails = crates and ns.PlanCrateMail() or ns.PlanMail()
+  if #mails == 0 then return say(crates and "No crate in bags." or "No full set in bags.") end
   if not window then makeWindow() end
-  mail = { to = address, name = address, mails = mails, i = 1, sent = 0, waited = 0 }
+  mail = { to = address, name = address, prefix = crates and "Crates: " or "Writs: ", mails = mails,
+    i = 1, sent = 0, waited = 0 }
   attachNext()
 end
 
@@ -750,6 +823,18 @@ function ns.BuildTransfer(parent, width)
   heading("Mail", -4)
   f.mailState = line(-28)
   f.mailNote = line(-44, "GameFontDisableSmall")
+  -- What the buttons below mail: writ sets or crates.
+  f.whatLabel = line(-70)
+  f.whatLabel:SetText("Mail")
+  f.what = {}
+  for i, w in ipairs({ { "writs", "Writ sets" }, { "crates", "Crates" } }) do
+    local c = ns.Skin.Choice(f, 100, 22)
+    c:SetText(w[2])
+    c:SetPoint("TOPLEFT", 60 + (i - 1) * 106, -64)
+    c:SetScript("OnClick", function() ns.SetMailWhat(w[1]) end)
+    c.what = w[1]
+    f.what[i] = c
+  end
   f.targets = {}
   f.forget = {}
   f.custom = CreateFrame("EditBox", nil, f, "InputBoxTemplate")
@@ -803,14 +888,26 @@ function ns.BuildTransfer(parent, width)
 
   function f:Refresh()
     -- Mail
-    local sets = ns.MailSetCount()
-    self.mailState:SetText(stateText(mailOpen, "Mailbox") .. ("   Sets in bags: %d"):format(sets))
-    self.mailNote:SetText("One set per writ: the writ and its material.")
+    local what = mailWhat()
+    for _, c in ipairs(self.what) do c:SetActive(c.what == what) end
+    local sets, note
+    if what == "crates" then
+      local plan = ns.PlanCrateMail()
+      sets = plan.crates
+      self.mailState:SetText(stateText(mailOpen, "Mailbox")
+        .. ("   Crates in bags: %d, material for %d"):format(plan.crates, plan.filled))
+      note = "Every crate, with the material in the bags to fill it: cheapest first, by the last AH prices."
+    else
+      sets = ns.MailSetCount()
+      self.mailState:SetText(stateText(mailOpen, "Mailbox") .. ("   Sets in bags: %d"):format(sets))
+      note = "One set per writ: the writ and its material."
+    end
+    self.mailNote:SetText(note)
     local targets = ns.MailRecipients()
     local unknown = false
     for _, b in ipairs(self.targets) do b:Hide() end
     for _, b in ipairs(self.forget) do b:Hide() end
-    local top = -64
+    local top = -94
     for i, t in ipairs(targets) do
       local b = self.targets[i]
       if not b then
@@ -845,7 +942,7 @@ function ns.BuildTransfer(parent, width)
     local rows = math.ceil(#targets / PER_ROW)
     top = top - rows * 26
     if unknown then
-      self.mailNote:SetText("One set per writ: the writ and its material. Grey: log in once to learn the surname.")
+      self.mailNote:SetText(note .. " Grey: log in once to learn the surname.")
     end
     place(self.custom, top - 2, 16)
     self.send:ClearAllPoints()

@@ -638,7 +638,7 @@ end
 -- draws the windows flat and dark, "classic" with the game's own frames (Theme.lua).
 local DEFAULTS = { page = "overview", writSort = "level", crateSort = "level", pins = true, ownerNames = 1,
   writCost = "per", crateCost = "per", repScale = 100, favorScale = 1, crateRefund = true, itemColor = "tier",
-  theme = "modern" }
+  theme = "modern", mailWhat = "writs" }
 
 local listeners = {}
 --- Call fn whenever what the pages show may have changed (bags, quests, item names).

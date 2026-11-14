@@ -69,6 +69,7 @@ A recipe of another profession (bars for engineering parts) shows `open` and its
 A *set* is one writ and its material.
 
 - **Mail**: one set of each writ in your bags to a character, up to 12 attachments a mail; click **Send** for each. Needs a mailbox on the Send Mail tab. Your alts are listed once you have logged in on them (mail goes to first name and surname). Type any other name to send to it, or **Save** it as a button.
+  - **Mail: Crates** sends every unfilled crate in your bags instead, each kind with the material in your bags to fill it: its cheapest material first by the last AH prices, then the next where that runs short. A crate with no material in your bags goes on its own.
 - **Bank**: needs the bank open. **Bank to bags** and **Bags to bank**, each with:
   - **1 of each**: a writ of each kind and its material (into the bags: only kinds the bags lack).
   - **Extra**: every writ but one of each kind.
