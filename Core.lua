@@ -306,8 +306,8 @@ function ns.Money(copper)
   return table.concat(parts, " ")
 end
 
---- ns.Coins, with a green "-" in front of an amount below 0: a writ whose Coin Pouch pays
---- more than the writ and its material cost.
+--- ns.Coins, with a green "-" in front of an amount below 0: a writ whose Coin Pouch, or a
+--- crate whose quest reward silver, pays more than it and its material cost.
 function ns.SignedCoins(copper)
   if copper and copper <= -0.5 then return ns.Color("ff40d040", "-") .. ns.Coins(-copper) end
   return ns.Coins(math.max(0, copper or 0))
@@ -350,7 +350,7 @@ end
 --- Each part: { each, material (each x count), total (crate and material, of what has a
 --- price), partial (the crate or the material has no price), age (days since the older
 --- of the two prices was seen), old (that is OLD_PRICE_DAYS or more), net (total less
---- the refund, not below 0; nil without a price), perFavor (net for each Merchant's
+--- the refund, below 0 when the refund pays more; nil without a price), perFavor (net for each Merchant's
 --- Favor; nil without a price or a favor amount) }.
 function ns.CrateCost(crate)
   local box, boxAge = ns.PriceInfo(crate.item)
@@ -368,7 +368,7 @@ function ns.CrateCost(crate)
     local part = {
       each = each, material = material, total = total, partial = not (box and material),
       age = age, old = age ~= nil and age >= ns.OLD_PRICE_DAYS,
-      net = (box or material) and math.max(0, total - refund) or nil,
+      net = (box or material) and total - refund or nil,
     }
     part.perFavor = favor and part.net and part.net / favor or nil
     cost.bundles[b] = part
@@ -384,7 +384,7 @@ function ns.CrateCost(crate)
     cost.total, cost.partial = box or 0, true
     cost.age = box and boxAge or nil
     cost.old = cost.age ~= nil and cost.age >= ns.OLD_PRICE_DAYS
-    cost.net = box and math.max(0, box - refund) or nil
+    cost.net = box and box - refund or nil
     cost.perFavor = favor and cost.net and cost.net / favor or nil
   end
   return cost

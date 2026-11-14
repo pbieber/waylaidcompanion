@@ -788,7 +788,7 @@ local function crateCostText(part, cost)
     if perFavor() and not cost.favor and (part.total or 0) > 0 then return ns.Color(GREY, "favor ?") end
     return ns.Color(GREY, "no price")
   end
-  local text = ns.Coins(value)
+  local text = ns.SignedCoins(value)
   if part.partial then text = text .. ns.Color(ORANGE, " + ?") end
   if part.old then text = text .. ns.Color(ORANGE, " *") end
   return text
@@ -810,7 +810,7 @@ local function crateCostLines(lines, crate, cost, bundle, name)
   elseif part.perFavor then
     lines[#lines + 1] = {
       ns.Color(GOLD, ("%s (pays %d)"):format(label, cost.favor)),
-      ns.Coins(part.perFavor * ns.db.favorScale) .. (part.partial and " + ?" or "") }
+      ns.SignedCoins(part.perFavor * ns.db.favorScale) .. (part.partial and " + ?" or "") }
   end
   if part.partial and part.total and part.total > 0 then
     lines[#lines + 1] = { ns.Color(ORANGE, ("  No price: %s"):format(cost.crate and name or "crate")) }
@@ -989,7 +989,7 @@ pages.crates = {
               elseif now.cheapest then
                 local b = now.cheapest
                 lines[#lines + 1] = { ns.Color(GREY, ("Cheapest: %d x %s"):format(b.count, ns.Item(b.item, b.name))),
-                  ns.Color(GREY, ns.Coins(now.net or now.total)) }
+                  ns.Color(GREY, ns.SignedCoins(now.net or now.total)) }
               end
               return lines
             end,
