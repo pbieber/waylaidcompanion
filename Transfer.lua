@@ -755,20 +755,28 @@ function ns.MailSetCount()
   return n
 end
 
+--- Bring up the mailbox's Send Mail tab, as a click on the tab would; whether it shows.
+local function showSendTab()
+  if not (SendMailFrame and SendMailFrame.IsShown) or SendMailFrame:IsShown() then return true end
+  local tab = MailFrameTab2
+  if tab and tab.Click then pcall(tab.Click, tab) end
+  if not SendMailFrame:IsShown() and MailFrameTab_OnClick then pcall(MailFrameTab_OnClick, tab, 2) end
+  return SendMailFrame:IsShown()
+end
+
 --- Mail to "Name Surname" what the Transfer page has chosen: one set of each writ in the
---- bags, or every crate with the material to fill it.
+--- bags, or every crate with the material to fill it. On the inbox tab, it switches to
+--- Send Mail first.
 function ns.MailSets(address)
   address = tidy(address)
   if address == "" then return say("Enter a name.") end
   if not mailOpen then return say("Open a mailbox.") end
   if job or mail then return say("A transfer is running.") end
-  if SendMailFrame and SendMailFrame.IsShown and not SendMailFrame:IsShown() then
-    return say("Open the Send Mail tab.")
-  end
-  if attachments() > 0 then return say("Clear the mail's attachments.") end
   local crates = mailWhat() == "crates"
   local mails = crates and ns.PlanCrateMail() or ns.PlanMail()
   if #mails == 0 then return say(crates and "No crate in bags." or "No full set in bags.") end
+  if not showSendTab() then return say("Open the Send Mail tab.") end
+  if attachments() > 0 then return say("Clear the mail's attachments.") end
   if not window then makeWindow() end
   mail = { to = address, name = address, prefix = crates and "Crates: " or "Writs: ", mails = mails,
     i = 1, sent = 0, waited = 0 }
