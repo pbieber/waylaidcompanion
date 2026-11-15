@@ -63,6 +63,26 @@ local function showTooltip(row)
   end
 end
 
+--- A modified click on an item's row, as on an item anywhere in the game: shift links it
+--- in chat, ctrl tries it on. True when the click was one, so the row's own click (craft,
+--- fill) doesn't also run. An item the game hasn't sent yet has no link: it's asked for,
+--- and the next click links it.
+local function itemClick(entry)
+  if not (entry and entry.item and IsModifiedClick) then return false end
+  if not (IsModifiedClick("CHATLINK") or IsModifiedClick("DRESSUP")) then return false end
+  local link = GetItemInfo and select(2, GetItemInfo(entry.item))
+  if not link then
+    if C_Item and C_Item.RequestLoadItemDataByID then pcall(C_Item.RequestLoadItemDataByID, entry.item) end
+    return true
+  end
+  if HandleModifiedItemClick then
+    HandleModifiedItemClick(link)
+  elseif IsModifiedClick("CHATLINK") and ChatEdit_InsertLink then
+    ChatEdit_InsertLink(link)
+  end
+  return true
+end
+
 -- A folding header's mark in the classic style.
 local FOLDED = "|TInterface/Buttons/UI-PlusButton-Up:14:14|t "
 local UNFOLDED = "|TInterface/Buttons/UI-MinusButton-Up:14:14|t "
@@ -106,6 +126,7 @@ local function makeRow(parent)
   row:SetScript("OnEnter", showTooltip)
   row:SetScript("OnLeave", function() GameTooltip:Hide() end)
   row:SetScript("OnClick", function(self)
+    if itemClick(self.entry) then return end
     if self.entry and self.entry.click then self.entry.click() end
   end)
   return row
