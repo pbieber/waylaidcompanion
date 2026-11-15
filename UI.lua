@@ -428,7 +428,7 @@ local STATE_TEXT = {
   open = "",
 }
 
---- What a writ's Cost column shows, as the Options page has it: the cost per repScale
+--- What a writ's Cost column shows, as the Cost switch has it: the cost per repScale
 --- reputation, or the writ and its material in all, either less the coin pouch's average
 --- silver while that option is on (below 0 when the pouch pays more). nil when nothing has
 --- a price.
@@ -659,7 +659,7 @@ end
 -- Writ, profession or tier, rep, cost per 100 rep, owned, zone, today.
 local WRIT_COLUMNS = { 0, 195, 290, 328, 432, 548, 655, 710 }
 
---- The Cost heading's tip, as the Options page has the cost shown.
+--- The Cost heading's tip, as the Cost switch has the cost shown.
 local function writCostTip()
   local what = ns.db.writCost == "total" and "Writ and material"
     or ("Writ and material per " .. ns.ScaleLabel(ns.db.repScale, "rep"))
@@ -667,7 +667,7 @@ local function writCostTip()
   return what .. ", at AH prices (your scan or Auctionator, newest).\n"
     .. "+ ?  a part has no price.\n"
     .. ("*  a price is %d+ days old.\n"):format(ns.OLD_PRICE_DAYS)
-    .. "Per rep or absolute, and the scale: Options."
+    .. "Per rep or absolute: the Cost button at the bottom right. The scale: Options."
 end
 --- The Owned heading's tip, for writs or crates.
 local function ownedTip(what)
@@ -766,7 +766,7 @@ local CRATE_COLUMNS = { 0, 270, 395, 455, 595, 710 }
 
 local CHEAPEST = "|TInterface/RaidFrame/ReadyCheck-Ready:12:12|t "
 
---- Whether the crates page shows a cost per favor (the Options page), not the absolute.
+--- Whether the crates page shows a cost per favor (the Cost switch), not the absolute.
 local function perFavor()
   return ns.db.crateCost ~= "total"
 end
@@ -777,7 +777,7 @@ local function crateCostHeading()
   return "Cost / " .. ns.ScaleLabel(ns.db.favorScale, "favor")
 end
 
---- The Cost heading's tip, as the Options page has the cost shown.
+--- The Cost heading's tip, as the Cost switch has the cost shown.
 local function crateCostTip()
   local what = "The crate and one material"
   if perFavor() then
@@ -789,7 +789,7 @@ local function crateCostTip()
     .. CHEAPEST .. " the crate's cheapest material.\n"
     .. "+ ?  a part has no price.\n"
     .. ("*  a price is %d+ days old.\n"):format(ns.OLD_PRICE_DAYS)
-    .. "Per favor or absolute, and the scale: Options."
+    .. "Per favor or absolute: the Cost button at the bottom right. The scale: Options."
 end
 
 --- What a crate's or a bundle's Cost column shows: the cost per favorScale favor, or in
@@ -1417,6 +1417,39 @@ end
 
 local SCAN_NAMES = { writs = "Writs", crates = "Crates", all = "Writs and crates" }
 
+-- The setting the cost switch at the foot of the writs and crates pages flips.
+local COST_KEYS = { writs = "writCost", crates = "crateCost" }
+
+--- What a page's cost is shown per: "100 rep", "favor".
+local function costScale(scope)
+  if scope == "writs" then return ns.ScaleLabel(ns.db.repScale, "rep") end
+  return ns.ScaleLabel(ns.db.favorScale, "favor")
+end
+
+--- The cost switch's label: how the page shows cost now.
+local function costSwitchText(scope)
+  if ns.db[COST_KEYS[scope]] == "total" then return "Cost: Absolute" end
+  return "Cost: Per " .. costScale(scope)
+end
+
+--- The cost switch's tip: both ways, the one shown first in white.
+local function costTip(button)
+  local scope = scanBar.scope
+  local key = COST_KEYS[scope]
+  if not key then return end
+  local per = scope == "writs"
+    and ("Per %s: the writ and its material for that much reputation."):format(costScale(scope))
+    or ("Per %s: the crate and a material for that much Merchant's Favor."):format(costScale(scope))
+  local total = scope == "writs" and "Absolute: what one writ costs." or "Absolute: what one filled crate costs."
+  local absolute = ns.db[key] == "total"
+  GameTooltip:SetOwner(button, "ANCHOR_TOPRIGHT")
+  GameTooltip:SetText("Cost", 1, 0.82, 0)
+  GameTooltip:AddLine(absolute and total or per, 1, 1, 1, true)
+  GameTooltip:AddLine(absolute and per or total, 0.6, 0.6, 0.6, true)
+  GameTooltip:AddLine("Click to switch. The scale: Options.", 0.6, 0.6, 0.6, true)
+  GameTooltip:Show()
+end
+
 --- Bring the scan button and progress bar up to date.
 local function updateScanBar()
   if not scanBar then return end
@@ -1480,6 +1513,7 @@ function refresh()
   if page.footer == "scan" then
     -- The scan button scans the items this page prices.
     scanBar.scope = key
+    scanBar.cost:SetText(costSwitchText(key))
     note:Hide()
     fillBar:Hide()
     scanBar:Show()
@@ -1673,9 +1707,22 @@ local function build()
   scanBar.button:SetPoint("LEFT", 0, 0)
   scanBar.button:SetScript("OnClick", function() ns.ToggleScan(scanBar.scope) end)
 
+  -- At its right end, the switch between the cost per rep or favor and the absolute cost.
+  scanBar.cost = Skin.Button(scanBar, "", 150, 22)
+  scanBar.cost:SetPoint("RIGHT", 0, 0)
+  scanBar.cost:SetScript("OnClick", function(self)
+    local key = COST_KEYS[scanBar.scope]
+    if not key then return end
+    ns.db[key] = ns.db[key] == "total" and "per" or "total"
+    refresh()
+    if GameTooltip:IsOwned(self) then costTip(self) end
+  end)
+  scanBar.cost:SetScript("OnEnter", function(self) costTip(self) end)
+  scanBar.cost:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
   scanBar.bar = CreateFrame("StatusBar", nil, scanBar)
   scanBar.bar:SetPoint("LEFT", scanBar.button, "RIGHT", 10, 0)
-  scanBar.bar:SetPoint("RIGHT", scanBar, "RIGHT", 0, 0)
+  scanBar.bar:SetPoint("RIGHT", scanBar.cost, "LEFT", -10, 0)
   scanBar.bar:SetHeight(16)
   scanBar.bar:SetStatusBarTexture(Skin.Bar())
   local back = scanBar.bar:CreateTexture(nil, "BACKGROUND")

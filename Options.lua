@@ -1,10 +1,11 @@
 --[[
 The Options page: how the writs and crates pages show cost, and how characters are named.
 
-  - Craftsman's Writs: cost per reputation or in all; per 1, 10, 100 or 1000 rep;
-    whether the coin pouch's average silver comes off the cost.
-  - Waylaid Crates: cost per Merchant's Favor or in all; per 1, 10, 100 or 1000 favor;
-    whether the quest reward silver comes off the cost.
+  - Craftsman's Writs: a cost per reputation is per 1, 10, 100 or 1000 rep; whether the
+    coin pouch's average silver comes off the cost.
+  - Waylaid Crates: a cost per Merchant's Favor is per 1, 10, 100 or 1000 favor; whether
+    the quest reward silver comes off the cost.
+  Per rep or favor, or in all: the Cost button at the foot of the writs and crates pages.
   - Items: names coloured by writ or crate tier, or by the item's rarity as in game.
   - Characters: "Show both names" (first name and surname) in the Owned columns.
   - Window: the modern or the classic style (after a reload), and the columns' order.
@@ -82,12 +83,12 @@ function ns.BuildOptions(parent, width)
     return list
   end
 
-  --- A box beside a section's Cost boxes for a setting that is on unless set to false,
-  --- with a "(?)" after its label: hover it for `fill`, which writes the tooltip.
+  --- A box on a row of its own for a setting that is on unless set to false, with a "(?)"
+  --- after its label: hover it for `fill`, which writes the tooltip.
   local function checkbox(top, key, label, fill)
     local box = CreateFrame("CheckButton", nil, f, "UICheckButtonTemplate")
     box:SetSize(24, 24)
-    box:SetPoint("TOPLEFT", 10 + LABEL_W + 2 * (BUTTON_W + 4) + 12, top - 27)
+    box:SetPoint("TOPLEFT", 6 + LABEL_W, top + 2)
     local text = box:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     text:SetPoint("LEFT", box, "RIGHT", 2, 0)
     text:SetText(label)
@@ -116,13 +117,9 @@ function ns.BuildOptions(parent, width)
 
   local top = -4
   heading("Craftsman's Writs", top)
-  choice("Cost", top - 28, "writCost", {
-    { "per", function() return "Per " .. ns.ScaleLabel(ns.db.repScale, "rep") end },
-    { "total", "Absolute" },
-  })
-  choice("Scale", top - 28 - ROW, "repScale", scales("rep"))
-  -- Beside the Cost boxes: whether a writ's cost is less its Coin Pouch's average silver.
-  checkbox(top, "writPouch", "Account for coin pouch silver", function()
+  choice("Scale", top - 28, "repScale", scales("rep"))
+  -- Below: whether a writ's cost is less its Coin Pouch's average silver.
+  checkbox(top - 28 - ROW, "writPouch", "Account for coin pouch silver", function()
     GameTooltip:SetText("Coin pouch gold", 1, 0.82, 0)
     GameTooltip:AddLine("Each writ turn-in gives a Coin Pouch. Account for its gold in the "
       .. "cheapest per rep calculation, at the average for the writ's tier.", 1, 1, 1, true)
@@ -142,24 +139,20 @@ function ns.BuildOptions(parent, width)
       GameTooltip:AddLine("* Not confirmed yet: from one pouch so far.", 0.6, 0.6, 0.6, true)
     end
   end)
-  note("Per rep: the writ and its material for that much reputation. Absolute: what one writ costs. "
-    .. "Ticked: less the coin pouch's average silver.", top - 28 - 2 * ROW)
+  note("The reputation a cost per rep is for. Per rep or absolute: the Cost button at the bottom "
+    .. "right of the writs page. Ticked: less the coin pouch's average silver.", top - 28 - 2 * ROW)
 
   top = top - 28 - 2 * ROW - 34
   heading("Waylaid Crates", top)
-  choice("Cost", top - 28, "crateCost", {
-    { "per", function() return "Per " .. ns.ScaleLabel(ns.db.favorScale, "favor") end },
-    { "total", "Absolute" },
-  })
-  choice("Scale", top - 28 - ROW, "favorScale", scales("favor"))
-  -- Beside the Cost boxes: whether a crate's cost is less its quest reward silver.
-  checkbox(top, "crateRefund", "Account for quest reward silver", function()
+  choice("Scale", top - 28, "favorScale", scales("favor"))
+  -- Below: whether a crate's cost is less its quest reward silver.
+  checkbox(top - 28 - ROW, "crateRefund", "Account for quest reward silver", function()
     GameTooltip:SetText("Quest reward silver", 1, 0.82, 0)
     GameTooltip:AddLine("Each crate turn-in also gives half its reputation as silver in quest "
       .. "rewards. Account for this silver in the cheapest per favor calculation.", 1, 1, 1, true)
   end)
-  note("Per favor: the crate and a material for that much of the Merchant's Favor it pays. "
-    .. "Absolute: what one filled crate costs. Ticked: less the quest reward silver.",
+  note("The Merchant's Favor a cost per favor is for. Per favor or absolute: the Cost button at "
+    .. "the bottom right of the crates page. Ticked: less the quest reward silver.",
     top - 28 - 2 * ROW)
 
   top = top - 28 - 2 * ROW - 34
