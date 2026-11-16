@@ -8,6 +8,10 @@ For a crafted material (a bar, a bolt, a cured hide, an engineering part) the wi
 has the queue of recipes that make enough of it for the crates in the bags, what it is
 made of first.
 
+Filling takes the material from one stack, so the Fill button names a stack that holds a
+crate's worth. When none does but the bags hold enough, the stacks are put together first,
+one move at a time (moving items in the bags needs no click).
+
 The game only lets an addon craft from a click, and one click crafts one recipe as often
 as asked, so the queue is worked through with one click on Craft per recipe.
 
@@ -109,6 +113,16 @@ local blocked = false -- the game refused the addon's craft
 local job             -- { crate, bundle, crates }: what the window is queueing
 local current         -- { recipe, crafts }: what the Craft button does
 local dialog
+local stacking        -- { item, need, moves, wait, locked }: stacks being put together
+local stackFailed = {}  -- [item] = GetTime() when putting its stacks together failed
+
+local Container = C_Container
+local Pickup = (Container and Container.PickupContainerItem) or PickupContainerItem
+local Split = (Container and Container.SplitContainerItem) or SplitContainerItem
+local GetItemInfo = (C_Item and C_Item.GetItemInfo) or GetItemInfo
+local STACK_MOVES = 20     -- moves at most to put one material's stacks together
+local STACK_RETRY = 10     -- seconds before stacks that wouldn't go together are tried again
+local LOCK_TIMEOUT = 6     -- seconds to wait for the game to unlock moved items
 
 local function inCombat()
   return InCombatLockdown ~= nil and InCombatLockdown()
@@ -204,7 +218,73 @@ local function canMake(recipe)
   return n or 9999
 end
 
-local function refresh()
+--- How many of an item one bag slot holds; nil when the game hasn't said.
+local function maxStack(id)
+  return GetItemInfo and select(8, GetItemInfo(id)) or nil
+end
+
+local function cursorBusy()
+  return GetCursorInfo and GetCursorInfo() ~= nil
+end
+
+local refresh
+
+--- Stop putting stacks together; failed when it didn't get a stack big enough.
+local function stopStacking(failed)
+  if stacking and failed then stackFailed[stacking.item] = GetTime() end
+  stacking = nil
+  refresh()
+end
+
+-- One move at a time: the smallest stack onto the largest, as much as that has room for,
+-- once the last move has settled, until one stack fills a crate.
+local stacker = CreateFrame("Frame")
+stacker:SetScript("OnUpdate", function(_, elapsed)
+  local st = stacking
+  if not st then return end
+  st.wait = st.wait - elapsed
+  if st.wait > 0 then return end
+  if inCombat() or cursorBusy() then st.wait = 0.3 return end
+  local list = ns.BagStacks(st.item)
+  for _, stack in ipairs(list) do
+    if stack.locked then
+      st.locked, st.wait = st.locked + elapsed + 0.1, 0.1
+      if st.locked > LOCK_TIMEOUT then stopStacking(true) end
+      return
+    end
+  end
+  st.locked = 0
+  if list[1] and list[1].count >= st.need then return stopStacking(false) end
+  local target, source = list[1], list[#list]
+  local room = (maxStack(st.item) or math.huge) - (target and target.count or 0)
+  if #list < 2 or room <= 0 or st.moves >= STACK_MOVES then return stopStacking(true) end
+  local n = math.min(source.count, room)
+  if n == source.count then Pickup(source.bag, source.slot) else Split(source.bag, source.slot, n) end
+  Pickup(target.bag, target.slot)
+  if cursorBusy() then
+    if ClearCursor then ClearCursor() end
+    return stopStacking(true)
+  end
+  st.moves, st.wait = st.moves + 1, 0.3
+end)
+
+--- The stack a fill should take a bundle's material from: the largest, when it holds a
+--- crate's worth. When none does but the bags hold enough in all, and a slot can hold
+--- that much, the stacks start going together and this returns nil.
+local function fillStack(bundle)
+  if not ns.BagStacks then return nil end
+  local list = ns.BagStacks(bundle.item)
+  if list[1] and list[1].count >= bundle.count then return list[1] end
+  if stacking or inCombat() or #list < 2 then return nil end
+  local failed = stackFailed[bundle.item]
+  if failed and GetTime() - failed < STACK_RETRY then return nil end
+  local max = maxStack(bundle.item)
+  if max and max < bundle.count then return nil end
+  stacking = { item = bundle.item, need = bundle.count, moves = 0, wait = 0, locked = 0 }
+  return nil
+end
+
+function refresh()
   if not dialog or not dialog:IsShown() or not job then return end
   if stale then index() end
   -- A run over every crate: whatever is next to fill, until nothing is.
@@ -248,18 +328,27 @@ local function refresh()
       crates, crates == 1 and "" or "s", fills))
     lines[2] = ns.Color(GREY, "One click fills one crate. Click again after the cast.")
   end
+  -- The stack to fill from; none while the stacks are put together.
+  local stack = fills > 0 and not inCombat() and fillStack(bundle) or nil
+  local putting = stacking and stacking.item == bundle.item
+  if putting then
+    table.insert(lines, 2, ns.Color(GOLD, ("Stacking %s: no one stack holds %d."):format(name, bundle.count)))
+  end
   -- A secure button can't be changed in combat; it is set again when the fight ends.
   if not inCombat() then
     local fill = dialog.fill
-    if fills > 0 then
+    if fills > 0 and not putting then
       fill:SetAttribute("type", "item")
       fill:SetAttribute("item", "item:" .. crate.item)
       fill:SetAttribute("target-item", "item:" .. bundle.item)
+      -- The stack itself, so the game doesn't pick one too small.
+      fill:SetAttribute("target-bag", stack and stack.bag or nil)
+      fill:SetAttribute("target-slot", stack and stack.slot or nil)
       fill:SetText(("Fill a crate (%d left)"):format(left or fills))
       fill:Enable()
     else
       fill:SetAttribute("type", nil)
-      fill:SetText("Fill a crate")
+      fill:SetText(putting and "Stacking material..." or "Fill a crate")
       fill:Disable()
     end
   end

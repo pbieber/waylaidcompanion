@@ -108,6 +108,12 @@ local function stacks(kind, id, free)
   return out
 end
 
+--- The stacks of an item in the bags, largest first: { bag, slot, id, count, locked }
+--- (Craft.lua puts them together when no one stack fills a crate).
+function ns.BagStacks(id)
+  return stacks("bags", id)
+end
+
 --- An empty slot to put a stack in (never the reagent bag, which takes reagents only).
 local function emptySlot(kind)
   for _, bag in ipairs(containers(kind)) do
