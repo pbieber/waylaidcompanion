@@ -38,6 +38,8 @@ local listeners = {}
 -- The auction house's own key for each item a scan (or a purchase's search) found, with
 -- when: { key, at } (GetTime()).
 local itemKeys = {}
+-- When (GetTime()) a scan, or a purchase's search, last noted each item's price.
+local priced = {}
 
 --- The auction house's key for an item, as the last search saw it; nil if unseen, or if
 --- seen more than maxAge seconds ago (when given).
@@ -108,6 +110,18 @@ local function itemsToScan(scope)
   return list
 end
 
+--- Whether the scan running has yet to settle an item: it is on its list and not done.
+function ns.ScanPending(id)
+  local pos = scan and scan.pos[id]
+  return pos ~= nil and pos >= scan.index
+end
+
+--- When (GetTime()) a scan or a purchase's search last noted an item's price; nil if not
+--- this session.
+function ns.PricedAt(id)
+  return priced[id]
+end
+
 --- { running, scope, done, total, item (name being searched), found, last } for the bar.
 function ns.ScanProgress()
   if not scan then return { running = false, last = last } end
@@ -141,6 +155,7 @@ local function advance(keep)
   local prices = ns.ScannedPrices()
   if keep and prices and item then
     prices[item.id] = { scan.best or 0, time and time() or os.time() }
+    priced[item.id] = GetTime and GetTime() or 0
     if scan.best then scan.found = scan.found + 1 end
   end
   scan.index, scan.page, scan.best, scan.state, scan.waited = scan.index + 1, 0, nil, "send", 0
@@ -280,6 +295,7 @@ function ns.RecordPrice(id, copper, key)
   local prices = ns.ScannedPrices()
   if prices and type(copper) == "number" then
     prices[id] = { math.floor(copper + 0.5), time and time() or os.time() }
+    priced[id] = GetTime and GetTime() or 0
   end
   noteKey(id, key)
   notify()
@@ -293,7 +309,8 @@ function ns.StartScan(scope)
   if not ns.CanScan() then return false, "No AH search on this client." end
   if not ahOpen then return false, "Open the AH." end
   if ns.Buying and ns.Buying() then return false, "Finish buying." end
-  scan = { scope = scope, items = itemsToScan(scope), index = 1, page = 0, found = 0, state = "send", waited = 0 }
+  scan = { scope = scope, items = itemsToScan(scope), pos = {}, index = 1, page = 0, found = 0, state = "send", waited = 0 }
+  for i, item in ipairs(scan.items) do scan.pos[item.id] = i end
   driver:Show()
   notify()
   return true

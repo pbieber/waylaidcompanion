@@ -92,6 +92,10 @@ local function makeRow(parent)
   row:SetHeight(ROW)
   row.stripe = row:CreateTexture(nil, "BACKGROUND")
   row.stripe:SetAllPoints()
+  -- A scan's flash: green when the row got cheaper, red when dearer (above the stripe).
+  row.flash = row:CreateTexture(nil, "BACKGROUND", nil, 1)
+  row.flash:SetAllPoints()
+  row.flash:Hide()
   row.icon = row:CreateTexture(nil, "ARTWORK")
   row.icon:SetSize(ROW - 4, ROW - 4)
   -- A group header's colour bar on its left, and its fold arrow (modern style).
@@ -178,8 +182,86 @@ local function setPortrait(row, creature)
   model.wanted = true
 end
 
+-- While a scan runs, a row whose items it hasn't reached yet is dimmed; once they're in,
+-- the row flashes green if what it costs went down, red if up.
+local PENDING_ALPHA = 0.35
+local FLASH_TIME = 1.6       -- seconds a flash takes to fade
+local FLASH_ALPHA = 0.45
+local FLASH_RECENT = 3       -- a row flashes only for prices noted this many seconds ago
+local CHEAPER, DEARER = { 0.25, 0.85, 0.3 }, { 0.95, 0.25, 0.25 }
+
+--- Whether the scan running has yet to reach one of an entry's items.
+local function scanPending(entry)
+  if not ns.ScanPending then return false end
+  for _, id in ipairs(entry.scan) do
+    if ns.ScanPending(id) then return true end
+  end
+  return false
+end
+
+--- Whether one of an entry's items had its price noted just now.
+local function pricedJustNow(entry)
+  if not ns.PricedAt or not GetTime then return false end
+  local now = GetTime()
+  for _, id in ipairs(entry.scan) do
+    local at = ns.PricedAt(id)
+    if at and now - at <= FLASH_RECENT then return true end
+  end
+  return false
+end
+
 local function makeList(parent)
   local l = {}
+  -- By an entry's key (not its row: rows are pooled and re-sorted): the cost it showed
+  -- last (false: none), whether it is waiting on the scan, and its flash going
+  -- ({ r, g, b, start }).
+  l.values, l.waiting, l.flashes = {}, {}, {}
+  l.flasher = CreateFrame("Frame", nil, parent)
+  l.flasher:Hide()
+  l.flasher:SetScript("OnUpdate", function(self)
+    local now, any = GetTime(), false
+    for key, flash in pairs(l.flashes) do
+      if now - flash[4] >= FLASH_TIME then l.flashes[key] = nil else any = true end
+    end
+    for _, row in ipairs(l.rows) do
+      local flash = row:IsShown() and row.entry and row.entry.key and l.flashes[row.entry.key]
+      if flash then
+        local fade = 1 - (now - flash[4]) / FLASH_TIME
+        row.flash:SetColorTexture(flash[1], flash[2], flash[3], FLASH_ALPHA * fade)
+        row.flash:Show()
+      else
+        row.flash:Hide()
+      end
+    end
+    if not any then self:Hide() end
+  end)
+
+  --- Dim a row while the scan has yet to reach its items; once it has, flash it when what
+  --- the row costs moved. The value from before the scan is kept until the row is done,
+  --- so a crate flashes once for all its materials.
+  function l:Track(row, entry)
+    local pending = entry.scan ~= nil and scanPending(entry)
+    row:SetAlpha(pending and PENDING_ALPHA or 1)
+    row.icon:SetDesaturated(pending)
+    if not entry.key then return end
+    local value = entry.value or false
+    local old = self.values[entry.key]
+    if pending then
+      -- What it cost as the scan reached it, to weigh the scan's prices against.
+      if not self.waiting[entry.key] then
+        self.waiting[entry.key] = true
+        self.values[entry.key] = value
+      end
+      return
+    end
+    self.waiting[entry.key] = nil
+    if old and value and math.abs(value - old) >= 0.5 and pricedJustNow(entry) then
+      local c = value < old and CHEAPER or DEARER
+      self.flashes[entry.key] = { c[1], c[2], c[3], GetTime() }
+      self.flasher:Show()
+    end
+    self.values[entry.key] = value
+  end
   l.scroll = CreateFrame("ScrollFrame", "PuggerWaylaidCompanionScroll", parent, "UIPanelScrollFrameTemplate")
   l.child = CreateFrame("Frame", nil, l.scroll)
   l.child:SetSize(10, 10)
@@ -378,6 +460,7 @@ local function makeList(parent)
         row.right:SetWidth(rightWidth)
         row.right:SetText(entry.right or "")
         setPortrait(row, entry.portrait)
+        row:SetAlpha(1)
       else
         row.stripe:SetColorTexture(1, 1, 1, i % 2 == 0 and (classic and 0.04 or 0.03) or 0)
         row.bar:Hide()
@@ -406,7 +489,9 @@ local function makeList(parent)
             cell:SetText("")
           end
         end
+        self:Track(row, entry)
       end
+      if not (entry.key and self.flashes[entry.key]) then row.flash:Hide() end
       row:EnableMouse(not entry.header or entry.click ~= nil)
       row:Show()
     end
@@ -621,6 +706,10 @@ local function writEntry(writ, sort, cost)
   return {
     icon = icon,
     item = writ.item,
+    -- For the scan: the items it searches for this row, and the cost the row shows.
+    key = writ,
+    scan = { writ.writItem, writ.item },
+    value = writValue(cost),
     tip = function()
       if ns.AuctionHouseOpen() and ns.CanBuy() then
         return tip .. "\n|cff40d040Click: buy.|r"
@@ -940,9 +1029,15 @@ pages.crates = {
         else
           second = ns.Color(tierColor, ns.CRATE_SKILL[crate.kind])
         end
+        -- The crate's cost is its cheapest material's, so it waits on all of them.
+        local scanned = { crate.item }
+        for _, bundle in ipairs(crate.bundles) do scanned[#scanned + 1] = bundle.item end
         entries[#entries + 1] = {
           icon = icon,
           item = crate.item,
+          key = crate,
+          scan = scanned,
+          value = crateValue(cost),
           tip = function()
             local tip = "Needs one material below.\n" .. favorTip .. "\n" .. where
             if ns.AuctionHouseOpen() and ns.CanBuy() then
@@ -999,6 +1094,9 @@ pages.crates = {
             icon = bundleIcon,
             item = bundle.item,
             indent = 22,
+            key = bundle,
+            scan = { crate.item, bundle.item },
+            value = part.material and crateValue(part) or nil,
             tip = crafted and "Click: fill crates with it, or craft it." or "Click: fill crates with it.",
             click = function() ns.Craft(crate, bundle) end,
             lines = function()
@@ -1778,4 +1876,10 @@ function ns.Toggle(page)
 end
 
 ns.OnChange(refresh)
-if ns.OnScan then ns.OnScan(updateScanBar) end
+-- While a scan runs the price pages redraw as each item comes in, to dim and flash rows.
+if ns.OnScan then
+  ns.OnScan(function()
+    local page = window and window:IsShown() and pages[ns.db.page]
+    if page and page.footer == "scan" then refresh() else updateScanBar() end
+  end)
+end
