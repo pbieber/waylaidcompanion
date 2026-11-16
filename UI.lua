@@ -479,7 +479,10 @@ local function makeList(parent)
           row:SetAlpha(1)
         end
       else
-        row.stripe:SetColorTexture(1, 1, 1, i % 2 == 0 and (classic and 0.04 or 0.03) or 0)
+        -- Every other row lighter, unless the page has its rows `flat` (the turn-ins
+        -- page, whose zone headers have that light band).
+        local striped = not entry.flat and i % 2 == 0
+        row.stripe:SetColorTexture(1, 1, 1, striped and (classic and 0.04 or 0.03) or 0)
         row.bar:Hide()
         row.arrow:Hide()
         row.right:SetText("")
@@ -1285,6 +1288,7 @@ pages.turnins = {
       entries[#entries + 1] = { header = "Waylaid Crates" }
       entries[#entries + 1] = {
         icon = "Interface/Icons/INV_Crate_01",
+        flat = true,
         tip = camp.faction .. "\nClick: map.",
         cells = { camp.name .. ns.Color(GREY, "  " .. camp.zone), ("%.1f, %.1f"):format(camp.x, camp.y),
           "All crates", "" },
@@ -1392,6 +1396,7 @@ pages.turnins = {
         entries[#entries + 1] = {
           icon = "Interface/Icons/INV_Misc_Note_01",
           indent = 16,
+          flat = true,
           key = "npc:" .. npc.id,
           scan = writItems(stop.writs),
           value = not stopCost.done and writValue(stopCost) or nil,
