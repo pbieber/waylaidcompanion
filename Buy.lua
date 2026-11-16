@@ -512,6 +512,23 @@ local function failed(why)
   show({ status = ns.Color(RED, "Stopped."), qty = s and (s.qty or s.need), notes = notes, action = "Skip" })
 end
 
+--- After the last purchase of a step: the listings the search found, less the `quantity`
+--- just bought from the cheapest up. When that took every one at the lowest price, the
+--- next price up (0: none left) is the item's price now, so the pages show it without
+--- another search.
+local function reprice(s, quantity)
+  if not s.list or not ns.RecordPrice then return end
+  local oldLow, newLow, left = nil, nil, quantity
+  for _, l in ipairs(s.list) do  -- cheapest first
+    if not oldLow or l.each < oldLow then oldLow = l.each end
+    local take = math.min(left, l.quantity)
+    left = left - take
+    if l.quantity > take and (not newLow or l.each < newLow) then newLow = l.each end
+  end
+  if oldLow and newLow == oldLow then return end  -- more still listed at that price
+  ns.RecordPrice(s.id, newLow or 0, s.key)
+end
+
 --- A purchase went through: count it; for auctions bought one at a time, search again
 --- for the next while more are wanted.
 local function bought(quantity)
@@ -520,6 +537,7 @@ local function bought(quantity)
   s.got = (s.got or 0) + quantity
   print(("%s: bought %d x %s."):format(ns.TITLE, quantity, s.name))
   if s.kind == "item" and s.target and s.got < s.target then return search() end
+  reprice(s, quantity)
   nextStep()
 end
 
