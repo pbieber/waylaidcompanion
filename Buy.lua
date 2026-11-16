@@ -13,6 +13,7 @@ small window inside the auction house window. It goes through two steps:
 
 From the turn-ins page, clicking a writ recipient buys every writ of theirs not held or
 handed in today, one each, then the material those writs ask for, less what the bags hold.
+Clicking a zone does the same for every recipient in it.
 
 Each step shows the item and "Paying <price> for:" above it.
 
@@ -1111,13 +1112,18 @@ function ns.BuyMaterials(list)
   search(true)  -- the click in the Transfer menu
 end
 
---- Buy what a writ recipient (a stop from ns.Stops) wants: one of each of their writs not
+--- Buy what writ recipients (stops from ns.Stops) want: one of each of their writs not
 --- handed in today and not in the bags, then the material for those and the writs held,
---- less what the bags hold (writs asking for the same material share it).
-function ns.BuyForStop(stop)
+--- less what the bags hold (writs asking for the same material share it, across
+--- recipients too). `title` heads the window.
+function ns.BuyForStops(stops, title)
   if not canStart() then return end
+  local writs = {}
+  for _, stop in ipairs(stops) do
+    for _, writ in ipairs(stop.writs) do writs[#writs + 1] = writ end
+  end
   local steps, materials, order = {}, {}, {}
-  for _, writ in ipairs(stop.writs) do
+  for _, writ in ipairs(writs) do
     if ns.WritState(writ) ~= "done" then
       local writStep
       if ns.Count(writ.writItem) == 0 then
@@ -1141,11 +1147,16 @@ function ns.BuyForStop(stop)
     if want > m.held then steps[#steps + 1] = m end  -- else: the bags hold enough
   end
   if #steps == 0 then
-    return print(("%s: everything for %s is in the bags."):format(ns.TITLE, stop.npc.name))
+    return print(("%s: everything for %s is in the bags."):format(ns.TITLE, title))
   end
   if not dialog then makeDialog() end
-  buy = { title = stop.npc.name, steps = steps, index = 1, bought = 0, waited = 0 }
-  search(true)  -- the click on the recipient's row
+  buy = { title = title, steps = steps, index = 1, bought = 0, waited = 0 }
+  search(true)  -- the click on the recipient's row or zone
+end
+
+--- Buy what one writ recipient wants (ns.BuyForStops).
+function ns.BuyForStop(stop)
+  ns.BuyForStops({ stop }, stop.npc.name)
 end
 
 --- Buy a writ or crate (the lead) and its material: the lead's count is set in the

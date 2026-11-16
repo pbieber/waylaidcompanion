@@ -5,7 +5,7 @@ The window: a menu down the left, a page on the right.
   Craftsman's Writs  - every writ, by tier, profession or cost
   Waylaid Crates     - every crate and its material, by tier, profession or cost
   Fastcraft          - the crates in the bags and what in the bags fills them
-  Turn-ins           - where writs and crates go; the same places Map.lua marks
+  Turn-ins           - where writs and crates go, by zone, and what a zone's writs cost
   Rewards            - the quartermaster's items (Rewards.lua)
   Transfer           - mail, bank and buying (Transfer.lua)
   Options            - how costs and characters are shown (Options.lua), at the menu's foot
@@ -462,7 +462,12 @@ local function makeList(parent)
         row.right:SetWidth(rightWidth)
         row.right:SetText(entry.right or "")
         setPortrait(row, entry.portrait)
-        row:SetAlpha(1)
+        -- A header that sums up its rows' costs waits on the scan as they do.
+        if entry.scan then
+          self:Track(row, entry)
+        else
+          row:SetAlpha(1)
+        end
       else
         row.stripe:SetColorTexture(1, 1, 1, i % 2 == 0 and (classic and 0.04 or 0.03) or 0)
         row.bar:Hide()
@@ -1222,10 +1227,44 @@ pages.fastcraft = {
   end,
 }
 
-local STOP_COLUMNS = { 0, 230, 400, 480, 710 }
+-- NPC, location, today, cost.
+local STOP_COLUMNS = { 0, 290, 380, 520, 710 }
+
+--- What a group of writs costs, writ and material, shaped like a writ's cost so the
+--- writs page's Cost column shows it: { net, perRep (over all their reputation),
+--- partial, old }. The writs open today only; `done` when none is.
+local function writsCost(writs)
+  local open = {}
+  for _, writ in ipairs(writs) do
+    if ns.WritState(writ) ~= "done" then open[#open + 1] = writ end
+  end
+  local net, rep, priced = 0, 0, false
+  local out = { partial = false, old = false, done = #open == 0 }
+  for _, writ in ipairs(open) do
+    local cost = ns.WritCost(writ)
+    if cost.net then net, priced = net + cost.net, true end
+    rep = rep + ns.WRIT_REP[writ.tier]
+    out.partial = out.partial or cost.partial
+    out.old = out.old or cost.old
+  end
+  if priced then out.net, out.perRep = net, net / rep end
+  return out
+end
+
+--- The items a scan prices for some writs: each writ and its material.
+local function writItems(writs)
+  local items = {}
+  for _, writ in ipairs(writs) do
+    items[#items + 1] = writ.writItem
+    items[#items + 1] = writ.item
+  end
+  return items
+end
 
 pages.turnins = {
   title = "Turn-ins",
+  footer = "scan",
+  scanScope = "writs",  -- its scan and Cost switch are the writs page's
   build = function()
     local entries = {}
     local camp = ns.Camp()
@@ -1234,7 +1273,8 @@ pages.turnins = {
       entries[#entries + 1] = {
         icon = "Interface/Icons/INV_Crate_01",
         tip = camp.faction .. "\nClick: map.",
-        cells = { camp.name, camp.zone, ("%.1f, %.1f"):format(camp.x, camp.y), "All crates" },
+        cells = { camp.name .. ns.Color(GREY, "  " .. camp.zone), ("%.1f, %.1f"):format(camp.x, camp.y),
+          "All crates", "" },
         click = function() ns.OpenMap(camp.map) end,
       }
     end
@@ -1254,47 +1294,98 @@ pages.turnins = {
       end
       return order[x] < order[y]
     end)
-    local continent
+    -- A continent's recipients, a zone at a time; each zone's header folds it away, and
+    -- at the auction house buys for all its recipients.
+    local zones, byKey = {}, {}
     for _, stop in ipairs(stops) do
-      if stop.continent ~= continent then
-        continent = stop.continent
+      local key = stop.continent .. ":" .. stop.npc.zone
+      local zone = byKey[key]
+      if not zone then
+        zone = { continent = stop.continent, name = stop.npc.zone, stops = {}, writs = {}, open = 0 }
+        byKey[key] = zone
+        zones[#zones + 1] = zone
+      end
+      zone.stops[#zone.stops + 1] = stop
+      zone.open = zone.open + stop.open
+      for _, writ in ipairs(stop.writs) do zone.writs[#zone.writs + 1] = writ end
+    end
+    local continent
+    for _, zone in ipairs(zones) do
+      if zone.continent ~= continent then
+        continent = zone.continent
         entries[#entries + 1] = { header = "Craftsman's Writs: " .. continent }
       end
-      local npc = stop.npc
-      local names = {}
-      for _, writ in ipairs(stop.writs) do
-        local state = ns.WritState(writ)
-        names[#names + 1] = ns.Color(ns.WRIT_COLOR[writ.tier], writ.name)
-          .. (state == "done" and ns.Color(GREY, " (done)") or "")
+      local cost = writsCost(zone.writs)
+      local head, folded = groupHeader("turnins", "zone", zone.continent .. ":" .. zone.name, zone.name,
+        nil, nil, ("%d NPC%s, %d of %d open"):format(#zone.stops, #zone.stops == 1 and "" or "s",
+          zone.open, #zone.writs))
+      head.indent = 16
+      head.key = "zone:" .. zone.continent .. ":" .. zone.name
+      head.scan = writItems(zone.writs)
+      head.value = not cost.done and writValue(cost) or nil
+      head.right = cost.done and ns.Color(GREY, "Done") or costText(cost)
+      local fold = head.click
+      head.tip = function()
+        if ns.AuctionHouseOpen() and ns.CanBuy() and zone.open > 0 then
+          return zone.name .. "\n|cff40d040Click: buy the writs open today here and their material.|r"
+        end
       end
-      local status
-      if stop.open == 0 then
-        status = ns.Color(GREY, "Done")
-      elseif stop.held > 0 then
-        status = ns.Color(GREEN, ("%d in bags"):format(stop.held))
-      else
-        status = ("%d of %d open"):format(stop.open, #stop.writs)
+      -- At the auction house: buy every recipient's writs and material here (Buy.lua).
+      head.click = function()
+        if ns.AuctionHouseOpen() and ns.CanBuy() and zone.open > 0 then
+          ns.BuyForStops(zone.stops, zone.name)
+        else
+          fold()
+        end
       end
-      local tip = npc.name .. "\n" .. table.concat(names, "\n")
-      entries[#entries + 1] = {
-        icon = "Interface/Icons/INV_Misc_Note_01",
-        tip = function()
-          if ns.AuctionHouseOpen() and ns.CanBuy() then
-            return tip .. "\n|cff40d040Click: buy the writs open today and their material.|r"
-          end
-          return tip .. "\nClick: map."
-        end,
-        cells = { npc.name, npc.zone, ("%.1f, %.1f"):format(npc.x, npc.y), status },
-        -- At the auction house: buy this recipient's writs and material (Buy.lua).
-        click = function()
-          if ns.AuctionHouseOpen() and ns.CanBuy() then ns.BuyForStop(stop) else ns.OpenMap(npc.map) end
-        end,
-      }
+      entries[#entries + 1] = head
+      for _, stop in ipairs(folded and {} or zone.stops) do
+        local npc = stop.npc
+        local names = {}
+        for _, writ in ipairs(stop.writs) do
+          local state = ns.WritState(writ)
+          local value = state ~= "done" and writValue(ns.WritCost(writ))
+          names[#names + 1] = ns.Color(ns.WRIT_COLOR[writ.tier], writ.name)
+            .. (state == "done" and ns.Color(GREY, " (done)") or "")
+            .. (value and ("  " .. ns.SignedCoins(value)) or "")
+        end
+        local status
+        if stop.open == 0 then
+          status = ns.Color(GREY, "Done")
+        elseif stop.held > 0 then
+          status = ns.Color(GREEN, ("%d in bags"):format(stop.held))
+        else
+          status = ("%d of %d open"):format(stop.open, #stop.writs)
+        end
+        local stopCost = writsCost(stop.writs)
+        local tip = npc.name .. "\n" .. table.concat(names, "\n")
+        entries[#entries + 1] = {
+          icon = "Interface/Icons/INV_Misc_Note_01",
+          indent = 16,
+          key = "npc:" .. npc.id,
+          scan = writItems(stop.writs),
+          value = not stopCost.done and writValue(stopCost) or nil,
+          tip = function()
+            if ns.AuctionHouseOpen() and ns.CanBuy() then
+              return tip .. "\n|cff40d040Click: buy the writs open today and their material.|r"
+            end
+            return tip .. "\nClick: map."
+          end,
+          cells = { npc.name, ("%.1f, %.1f"):format(npc.x, npc.y), status,
+            stopCost.done and "" or costText(stopCost) },
+          -- At the auction house: buy this recipient's writs and material (Buy.lua).
+          click = function()
+            if ns.AuctionHouseOpen() and ns.CanBuy() then ns.BuyForStop(stop) else ns.OpenMap(npc.map) end
+          end,
+        }
+      end
     end
     local known, total = ns.KnownTurnIns()
-    return entries, STOP_COLUMNS,
-      ("On the world map (/pwc map). Known turn-ins: %d of %d."):format(known, total),
-      { "NPC", "Zone", "Location", "Today" }
+    return entries, STOP_COLUMNS, nil, {
+      { "NPC", ("On the world map (/pwc map). Known turn-ins: %d of %d."):format(known, total) },
+      "Location", "Today",
+      { writCostHeading(), "The writs not handed in today.\n" .. writCostTip() },
+    }
   end,
 }
 
@@ -1625,9 +1716,9 @@ function refresh()
   end
 
   if page.footer == "scan" then
-    -- The scan button scans the items this page prices.
-    scanBar.scope = key
-    scanBar.cost:SetText(costSwitchText(key))
+    -- The scan button scans the items this page prices; the turn-ins page's are the writs.
+    scanBar.scope = page.scanScope or key
+    scanBar.cost:SetText(costSwitchText(scanBar.scope))
     note:Hide()
     fillBar:Hide()
     scanBar:Show()
