@@ -1178,10 +1178,11 @@ function ns.BuyForWrit(writ)
     { label = "Reputation", each = ns.WRIT_REP[writ.tier] })
 end
 
---- Buy crates and their cheapest material, by the prices known now (the search for it
---- then finds what it costs). The crates the bags' other materials fill need none.
-function ns.BuyForCrate(crate)
-  local bundle = ns.CrateCost(crate).cheapest
+--- Buy crates and a material: `bundle` when given, else the cheapest by the prices known
+--- now (the search for it then finds what it costs). The crates the bags' other materials
+--- fill need none.
+function ns.BuyForCrate(crate, bundle)
+  bundle = bundle or ns.CrateCost(crate).cheapest
   if not bundle then
     -- No material has a price yet: the one the bags hold most crates' worth of, else
     -- the first.

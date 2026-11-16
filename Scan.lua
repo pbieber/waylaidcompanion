@@ -74,9 +74,29 @@ function ns.CanScan()
   return MODERN or LEGACY
 end
 
+--- A list ordered cheapest first by `cost(x)` = { value, partial } as last seen: whole
+--- prices, then those missing a part, then none; ties as they were.
+local function byCost(list, cost)
+  local keyed = {}
+  for i, x in ipairs(list) do
+    local c = cost(x)
+    keyed[i] = { x = x, i = i, value = c.value or 0, rank = c.value and (c.partial and 2 or 1) or 3 }
+  end
+  table.sort(keyed, function(a, b)
+    if a.rank ~= b.rank then return a.rank < b.rank end
+    if a.value ~= b.value then return a.value < b.value end
+    return a.i < b.i
+  end)
+  local out = {}
+  for i, k in ipairs(keyed) do out[i] = k.x end
+  return out
+end
+
 --- The items a scope prices, once each, with the name the data has for it: "writs" the
 --- player's writs and what they ask for, "crates" the crates and what fills them, nil both.
-local function scopeItems(scope)
+--- With `cheapest`, the writs and crates go cheapest first by the prices known now (per
+--- rep, per favor), a crate's materials too, so a scan reaches the ones worth buying first.
+local function scopeItems(scope, cheapest)
   local list, seen = {}, {}
   local function add(id, name)
     if id and not seen[id] then
@@ -84,8 +104,19 @@ local function scopeItems(scope)
       list[#list + 1] = { id = id, name = name }
     end
   end
+  local writs, crates = ns.writs, ns.crates
+  if cheapest then
+    writs = byCost(writs, function(writ)
+      local cost = ns.WritCost(writ)
+      return { value = cost.perRep, partial = cost.partial }
+    end)
+    crates = byCost(crates, function(crate)
+      local cost = ns.CrateCost(crate)
+      return { value = cost.perFavor or cost.net, partial = cost.partial }
+    end)
+  end
   if scope ~= "crates" then
-    for _, writ in ipairs(ns.writs) do
+    for _, writ in ipairs(writs) do
       if ns.ForPlayer(writ) then
         add(writ.writItem)
         add(writ.item, writ.name)
@@ -93,17 +124,23 @@ local function scopeItems(scope)
     end
   end
   if scope ~= "writs" then
-    for _, crate in ipairs(ns.crates) do
+    for _, crate in ipairs(crates) do
       add(crate.item)
-      for _, bundle in ipairs(crate.bundles) do add(bundle.item, bundle.name) end
+      local bundles = crate.bundles
+      if cheapest then
+        local cost = ns.CrateCost(crate)
+        bundles = byCost(bundles, function(bundle) return { value = cost.bundles[bundle].material } end)
+      end
+      for _, bundle in ipairs(bundles) do add(bundle.item, bundle.name) end
     end
   end
   return list
 end
 
---- The items to scan for a scope, with the game asked to load each one's name.
+--- The items to scan for a scope, cheapest first, with the game asked to load each
+--- one's name.
 local function itemsToScan(scope)
-  local list = scopeItems(scope)
+  local list = scopeItems(scope, true)
   if C_Item and C_Item.RequestLoadItemDataByID then
     for _, item in ipairs(list) do pcall(C_Item.RequestLoadItemDataByID, item.id) end
   end

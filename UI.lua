@@ -185,6 +185,8 @@ end
 -- While a scan runs, a row whose items it hasn't reached yet is dimmed; once they're in,
 -- the row flashes green if what it costs went down, red if up.
 local PENDING_ALPHA = 0.35
+-- A row the page marks `dim`, such as a crate's dearer materials, is faded a little.
+local DIM_ALPHA = 0.6
 local FLASH_TIME = 1.6       -- seconds a flash takes to fade
 local FLASH_ALPHA = 0.45
 local FLASH_RECENT = 3       -- a row flashes only for prices noted this many seconds ago
@@ -241,7 +243,7 @@ local function makeList(parent)
   --- so a crate flashes once for all its materials.
   function l:Track(row, entry)
     local pending = entry.scan ~= nil and scanPending(entry)
-    row:SetAlpha(pending and PENDING_ALPHA or 1)
+    row:SetAlpha(pending and PENDING_ALPHA or (entry.dim and DIM_ALPHA or 1))
     row.icon:SetDesaturated(pending)
     if not entry.key then return end
     local value = entry.value or false
@@ -1097,8 +1099,22 @@ pages.crates = {
             key = bundle,
             scan = { crate.item, bundle.item },
             value = part.material and crateValue(part) or nil,
-            tip = crafted and "Click: fill crates with it, or craft it." or "Click: fill crates with it.",
-            click = function() ns.Craft(crate, bundle) end,
+            -- Not the crate's cheapest: faded, so the one to use stands out.
+            dim = cost.cheapest ~= nil and not cheapest,
+            tip = function()
+              if ns.AuctionHouseOpen() and ns.CanBuy() then
+                return "|cff40d040Click: buy crates, with this material.|r"
+              end
+              return crafted and "Click: fill crates with it, or craft it." or "Click: fill crates with it."
+            end,
+            -- At the auction house: buy crates and this material (Buy.lua).
+            click = function()
+              if ns.AuctionHouseOpen() and ns.CanBuy() then
+                ns.BuyForCrate(crate, bundle)
+              else
+                ns.Craft(crate, bundle)
+              end
+            end,
             lines = function()
               local lines = { { " " } }
               local now = ns.CrateCost(crate)
