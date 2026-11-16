@@ -2,8 +2,11 @@
 The window's first page:
 
   - a bar, drawn like the experience bar, for the way to the next reputation standing;
-  - how many writs of each tier that takes, and how many to reach Exalted;
-  - how many daily turn-ins are left today, and the reputation they are worth.
+  - Today: how many daily turn-ins are left today, and the reputation they are worth;
+  - Cost: roughly what the next standing costs in writs at AH prices, and how many days
+    it takes, handing in the cheapest COST_DAILY a day, or every writ there is a day
+    (ns.WritPlan);
+  - Turn-ins needed: how many writs of each tier that takes, and how many to Exalted.
 
 ns.BuildOverview makes the frame; UI.lua places it and calls its Refresh.
 ]]
@@ -15,6 +18,8 @@ local GREY = "ff808080"
 local SEGMENTS = 20 -- the experience bar's
 local ROW = 22
 local COLUMNS = { 10, 250, 440 }
+-- The writs a day of the Cost box's first plan.
+local COST_DAILY = 20
 
 -- The reputation bar's colour for each standing, where the game does not supply them.
 local BAR_COLOR = {
@@ -124,19 +129,45 @@ function ns.BuildOverview(parent, width)
     ns.Skin.Border(f, ns.Skin.color.line, "BORDER", back)
   end
 
-  card(-80, -106 - (1 + #ns.WRIT_TIERS) * ROW - 24)
-  heading("Turn-ins needed", -88)
-  f.needed = makeGrid(f, -106, 1 + #ns.WRIT_TIERS)
+  -- The boxes, top down, each a card with a heading: Today, Cost, Turn-ins needed.
+  local top = -88
+  local todayRows = 2 + #ns.WRIT_TIERS
+  card(top + 8, top - 44 - todayRows * ROW - 6)
+  heading("Today", top)
+  f.todayLine = f:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+  f.todayLine:SetPoint("TOPLEFT", 10, top - 20)
+  f.today = makeGrid(f, top - 44, todayRows)
+
+  top = top - 44 - todayRows * ROW - 26
+  card(top + 8, top - 18 - 3 * ROW - 24)
+  heading("Cost", top)
+  f.cost = makeGrid(f, top - 18, 3)
+  f.costNote = f:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+  f.costNote:SetPoint("TOPLEFT", 10, top - 18 - 3 * ROW - 4)
+  f.costNote:SetPoint("RIGHT", -10, 0)
+  f.costNote:SetJustifyH("LEFT")
+  f.costNote:SetWordWrap(false)
+
+  top = top - 18 - 3 * ROW - 44
+  local neededRows = 1 + #ns.WRIT_TIERS
+  card(top + 8, top - 18 - neededRows * ROW - 24)
+  heading("Turn-ins needed", top)
+  f.needed = makeGrid(f, top - 18, neededRows)
   f.neededNote = f:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
-  f.neededNote:SetPoint("TOPLEFT", 10, -106 - (1 + #ns.WRIT_TIERS) * ROW - 4)
+  f.neededNote:SetPoint("TOPLEFT", 10, top - 18 - neededRows * ROW - 4)
   f.neededNote:SetText("If all of one tier.")
 
-  local todayTop = -106 - (1 + #ns.WRIT_TIERS) * ROW - 44
-  card(todayTop + 8, todayTop - 44 - (2 + #ns.WRIT_TIERS) * ROW - 6)
-  heading("Today", todayTop)
-  f.todayLine = f:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-  f.todayLine:SetPoint("TOPLEFT", 10, todayTop - 20)
-  f.today = makeGrid(f, todayTop - 44, 2 + #ns.WRIT_TIERS)
+  --- A Cost row's cells: the plan's cost ("+ ?" when a writ in it has no price, "*" when
+  --- a price is old) and its days.
+  local function planCells(plan)
+    if plan.none then return ns.Color(GREY, "no writs"), "" end
+    if not ns.HasPrices() then return ns.Color(GREY, "no prices"), "" end
+    local text = ns.SignedCoins(plan.cost)
+    if plan.partial then text = text .. ns.Color("ffff8040", " + ?") end
+    if plan.old then text = text .. ns.Color("ffff8040", " *") end
+    local days = ("%d day%s"):format(plan.days, plan.days == 1 and "" or "s")
+    return text, days .. ns.Color(GREY, ("  (%d writs)"):format(plan.writs))
+  end
 
   function f:Refresh()
     local rep = ns.Reputation()
@@ -191,6 +222,29 @@ function ns.BuildOverview(parent, width)
     if not rep then
       self.needed:Row(1, "Tier", "", "")
       for tier = 1, tiers do self.needed:Row(1 + tier, tierLabel(tier), "", "") end
+    end
+
+    -- Cost: the next standing, two ways.
+    if not rep or rep.exalted then
+      self.cost:Row(1, "Plan", "Cost", "Days")
+      self.cost:Row(2, ("Cheapest %d a day"):format(COST_DAILY), ns.Color(GREY, rep and "Exalted" or ""), "")
+      self.cost:Row(3, "Every writ a day", ns.Color(GREY, rep and "Exalted" or ""), "")
+      self.costNote:SetText(rep and "" or "Faction unknown.")
+    else
+      local nextName = ns.StandingName(math.min(rep.standing + 1, 8))
+      local cheap, every = ns.WritPlan(rep.toNext, COST_DAILY), ns.WritPlan(rep.toNext)
+      self.cost:Row(1, "To " .. nextName, "Cost", "Days")
+      local cost, days = planCells(cheap)
+      self.cost:Row(2, ("Cheapest %d a day"):format(COST_DAILY)
+        .. ns.Color(GREY, ("  %s rep"):format(number(cheap.daily))), cost, days)
+      cost, days = planCells(every)
+      self.cost:Row(3, "Every writ a day" .. ns.Color(GREY, ("  %s rep"):format(number(every.daily))),
+        cost, days)
+      local note = ("%s rep, at AH prices"):format(number(rep.toNext))
+      if ns.db.writPouch ~= false then note = note .. ", less coin pouch silver" end
+      note = note .. ". Counting today's open writs. Cheapest per rep first."
+      if cheap.partial or every.partial then note = note .. " + ?  a writ has no price." end
+      self.costNote:SetText(note)
     end
 
     if today.open == 0 then

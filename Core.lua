@@ -647,6 +647,85 @@ function ns.Today()
   return today
 end
 
+--- What reaching `goal` reputation through writs roughly costs, handing in at most
+--- `perDay` writs a day (nil: every writ there is), the cheapest per rep first.
+---
+--- Each writ is a daily, so a day offers each of the player's writs once; the first day
+--- only those not handed in today. A day takes the perDay cheapest, and the last day
+--- only as many of those as the goal still needs. Writs with a whole price go first,
+--- then those with a price for one part, then those with none. A writ's cost is what
+--- ns.WritCost nets: the writ and its material, less the coin pouch while that option
+--- is on.
+---
+--- { cost (copper), days, writs (handed in), rep, daily (the rep a full day brings),
+---   partial (a writ used has no price, or a price for one part only), old (a price
+---   used is OLD_PRICE_DAYS or more old), none (no writ to hand in) }
+function ns.WritPlan(goal, perDay)
+  local list = {}
+  for _, writ in ipairs(ns.writs) do
+    if ns.ForPlayer(writ) then
+      local c = ns.WritCost(writ)
+      local rank = (not c.net and 3) or (c.partial and 2) or 1
+      list[#list + 1] = { writ = writ, cost = c, rank = rank, rep = ns.WRIT_REP[writ.tier],
+        perRep = c.perRep or 0, done = ns.DoneToday(writ.quest) }
+    end
+  end
+  table.sort(list, function(a, b)
+    if a.rank ~= b.rank then return a.rank < b.rank end
+    if a.perRep ~= b.perRep then return a.perRep < b.perRep end
+    return a.writ.quest < b.writ.quest
+  end)
+  local plan = { cost = 0, days = 0, writs = 0, rep = 0, daily = 0, partial = false, old = false }
+  local take = perDay and math.min(perDay, #list) or #list
+  for i = 1, take do plan.daily = plan.daily + list[i].rep end
+  if goal <= 0 then return plan end
+  if plan.daily == 0 then plan.none = true return plan end
+  local function hand(e)
+    plan.writs, plan.rep = plan.writs + 1, plan.rep + e.rep
+    plan.cost = plan.cost + (e.cost.net or 0)
+    if e.rank > 1 then plan.partial = true end
+    if e.cost.old then plan.old = true end
+  end
+  -- The first day: the writs still open today.
+  plan.days = 1
+  local n = 0
+  for _, e in ipairs(list) do
+    if plan.rep >= goal or (perDay and n >= perDay) then break end
+    if not e.done then
+      hand(e)
+      n = n + 1
+    end
+  end
+  -- Then whole days of the cheapest `take`, while the goal is more than a day away...
+  local dayCost, dayOld, dayPartial = 0, false, false
+  for i = 1, take do
+    local e = list[i]
+    dayCost = dayCost + (e.cost.net or 0)
+    dayOld = dayOld or e.cost.old
+    dayPartial = dayPartial or e.rank > 1
+  end
+  if plan.rep < goal then
+    local whole = math.floor((goal - plan.rep) / plan.daily)
+    if whole > 0 then
+      plan.days = plan.days + whole
+      plan.writs = plan.writs + whole * take
+      plan.rep = plan.rep + whole * plan.daily
+      plan.cost = plan.cost + whole * dayCost
+      plan.old = plan.old or dayOld
+      plan.partial = plan.partial or dayPartial
+    end
+  end
+  -- ...and a last day of as many as are still needed.
+  if plan.rep < goal then
+    plan.days = plan.days + 1
+    for i = 1, take do
+      if plan.rep >= goal then break end
+      hand(list[i])
+    end
+  end
+  return plan
+end
+
 -- ---------------------------------------------------------------------------
 -- Saved settings, and telling the pages something changed
 -- ---------------------------------------------------------------------------
@@ -726,6 +805,9 @@ events:SetScript("OnEvent", function(_, event, arg1)
     db.columns = db.columns or {}
     -- Each character's surname, by "Name-Realm": WoW Forever mail goes to "Name Surname".
     db.surnames = db.surnames or {}
+    -- What each character spent at the auction house on writs, crates and their
+    -- materials, by day (Spent.lua): { ["Name-Realm"] = { ["2026-11-16"] = { [item] = { count, copper } } } }.
+    db.spent = db.spent or {}
     ns.db = db
     for _, fn in ipairs(loaded) do fn() end
     return

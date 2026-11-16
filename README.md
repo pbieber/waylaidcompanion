@@ -6,7 +6,7 @@ A World of Warcraft Classic addon for the two trade factions, Durotar Supply and
 
 Open the window with `/pwc`, the minimap button or the addon compartment.
 
-- **Overview**: your standing, the turn-ins to the next standing and to Exalted, and what is open today.
+- **Overview**: your standing; what is open today; **Cost**, roughly what the next standing costs in writs at AH prices and how many days it takes, handing in the 20 cheapest per rep a day or every writ a day (today's open writs count as the first day); and the turn-ins to the next standing and to Exalted.
 - **Craftsman's Writs**: every writ for your side, by tier, profession or cost: material, rep, cost (per 100 rep by default), owned, zone of the turn-in, today. Each turn-in gives a Coin Pouch (the same name for every tier), and its average silver comes off the cost: Journeyman 35s (20s to 50s), Expert 75s (50s to 1g), Artisan 1g 50s (1g to 2g, from one pouch so far, not confirmed). Untick **Account for coin pouch silver** under Options to leave it out. A cost below 0 (a green minus) means the pouch pays more than the writ and its material. Click a row: map (or, at the auction house, buy).
 - **Waylaid Crates**: every crate, by tier, profession or cost: the Merchant's Favor it pays, its cost with its cheapest material (per favor by default), owned. Each material under a crate shows the crate's cost filled with that one, and the cheapest is ticked. Crates of gathered goods (herbs, ore, textiles, curiosities) are white, crates of crafted goods (ingots, fabrics, parts) green, and a green crate pays twice the favor of a white one of its tier. A turn-in also pays half its favor in silver (5 favor, 2s 50c); that comes off the cost unless you untick **Account for quest reward silver** under Options. A cost below 0 (a green minus) means the silver pays more than the crate and its material. At the auction house, click a crate's row to buy it.
 - **Fastcraft**: the crates in your bags, the materials in your bags that fill them, and how many crates that fills. **Craft** fills them all, one kind after the other (below).
@@ -14,9 +14,11 @@ Open the window with `/pwc`, the minimap button or the addon compartment.
   - Hover a marker on the world map for its writs today: **Done**, **Ready** with a tick (writ and material in your bags), **Writ** and **Material** with a tick or a cross when your bags have only one of the two, or **Open**. When what your bags lack (the writ, or its material) is elsewhere on the account (bank, mail, another character), it shows underneath who has the writ and the material and where.
 - **Rewards**: what your faction's quartermasters sell, one list per profession, each with its own quartermaster, by standing, with its cost and whether you can buy it. Learned the first time you open each quartermaster's shop.
 - **Transfer**: mail, bank and buying for writs (below).
-- **Options**, at the foot of the menu: show writ and crate costs per reputation and per favor, or absolute; the scale (per 1, 10, 100 or 1000 rep or favor, each on its own); item names by tier colour or in their in-game rarity colour (the tier then shows in the Profession column's colour, or in the Tier column when sorted by profession); **Show both names**; and the window's **Style**, Modern (flat and dark) or Classic (the game's own frames), which changes after a reload.
+- **Options**, at the foot of the menu: the scale (per 1, 10, 100 or 1000 rep or favor, each on its own); item names by tier colour or in their in-game rarity colour (the tier then shows in the Profession column's colour, or in the Tier column when sorted by profession); **Show both names**; and the window's **Style**, Modern (flat and dark) or Classic (the game's own frames), which changes after a reload.
 
-Click a group header to fold it.
+Click a group header to fold it. On the writs and crates pages, the **Cost** button at the bottom right switches between the cost per rep (or favor) and the absolute cost. Shift-click an item to link it in chat.
+
+The addon also notes what each character spends at the auction house on writs, crates and their materials, for a later version to show. It stays in your saved variables and is not part of `/pwc export`.
 
 ## Prices
 
