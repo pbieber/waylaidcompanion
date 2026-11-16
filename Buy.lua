@@ -3,7 +3,10 @@ Buying writs or crates and what fills them at the auction house, from the writs 
 crates pages: with the auction house open, clicking a writ's or a crate's row opens a
 small window inside the auction house window. It goes through two steps:
 
-  1. the writ or crate (the lead): how many to buy (Max: every one listed);
+  1. the writ or crate (the lead): how many to buy (Max: every one listed), or the
+     reputation or favor to buy. The material is searched first, so this step can say
+     how many writs or crates, with their material, are listed near the price the pages
+     showed, and warn when the count asked for would cost more than that;
   2. the material: as many as those and the ones in the bags ask for, less what the bags
      hold. For a crate, its cheapest material, and the crates the bags' other materials
      fill already need none.
@@ -42,6 +45,9 @@ local ERROR_GRACE = 4
 -- key) before it is offered, and a Buy clicked on an offer this old searches again and
 -- offers the new price instead of buying.
 local STALE = 180
+-- How far above the price the pages showed a listing may be and still count as at that
+-- price, for the warning on a writ's or crate's step.
+local NEAR = 1.1
 local ADDON = ...
 local GetItemInfo = (C_Item and C_Item.GetItemInfo) or GetItemInfo
 local RED, GREY = "ffff4040", "ff808080"
@@ -160,7 +166,6 @@ local function show(view)
   dialog.notes:ClearAllPoints()
   dialog.notes:SetPoint("TOPLEFT", 16, notesTop)
   dialog.notes:SetPoint("TOPRIGHT", -16, notesTop)
-  dialog:SetHeight(buy.gain and DIALOG_HEIGHT + GAIN_ROW or DIALOG_HEIGHT)
 
   local notes = {}
   local given = view.notes or {}
@@ -168,6 +173,11 @@ local function show(view)
     if given[i] then notes[#notes + 1] = given[i] end
   end
   dialog.notes:SetText(table.concat(notes, "\n"))
+  -- Taller when the notes need it, never shorter than the purchase started.
+  local height = buy.gain and DIALOG_HEIGHT + GAIN_ROW or DIALOG_HEIGHT
+  local text = dialog.notes.GetStringHeight and dialog.notes:GetStringHeight()
+  if type(text) == "number" then height = math.max(height, -notesTop + text + 48) end
+  dialog:SetHeight(height)
 
   if view.action then
     dialog.buy:SetText(view.action)
@@ -196,7 +206,7 @@ local function finish(message)
   ns.Changed()
 end
 
-local search, handOff, offer
+local search, handOff, offer, matDone
 
 -- Learned in play: whether this client blocks a search the addon sends outside a click.
 -- Once it has, every search waits for a click on Look up.
@@ -285,6 +295,26 @@ function search(fromClick)
     end
   end
   if s.target then s.need = s.target - s.got end  -- partway through: what is left
+  -- A writ's or crate's step looks at its material's listings first (again once they
+  -- are old): its own search then comes last, and stays the one its purchase goes by.
+  -- Not where searches need a click each: that would cost the player one more.
+  local m = s.lead and buy.matStep
+  if m and (not buy.matAt or GetTime() - buy.matAt > STALE) and not searchNeedsClick then
+    buy.matList = nil
+    -- Without a fresh key of the auction house's own, browse for one first.
+    buy.matKey = ns.ItemKey and ns.ItemKey(m.id, STALE)
+    show({ status = "Searching...", qty = s.need })
+    local ready = not AH.IsThrottledMessageSystemReady or AH.IsThrottledMessageSystemReady()
+    if not buy.matKey then
+      buy.state, buy.waited = "matbrowse0", 0
+    elseif fromClick and ready then
+      buy.state, buy.waited, buy.clickSent = "matwait", 0, true
+      AH.SendSearchQuery(buy.matKey, sorts(), true)
+    else
+      buy.state, buy.waited = "matsend", 0
+    end
+    return
+  end
   if not s.key then
     buy.state = "browse0"
     return show({ status = "Searching...", qty = s.need })
@@ -302,12 +332,12 @@ end
 -- Answers from the auction house
 -- ---------------------------------------------------------------------------
 
---- What `want` costs from the listings, cheapest first: { quantity, price, low, high }.
+--- What `want` costs from listings, cheapest first: { quantity, price, low, high }.
 --- Every listing is { quantity, each }: for commodities the units at that price, for
 --- items the writs listed at that price (each bought with its own click).
-local function plan(s, want)
+local function planList(list, want)
   local p = { quantity = 0, price = 0 }
-  for _, l in ipairs(s.list or {}) do
+  for _, l in ipairs(list or {}) do
     if p.quantity >= want then break end
     local take = math.min(want - p.quantity, l.quantity)
     p.quantity, p.price = p.quantity + take, p.price + take * l.each
@@ -315,6 +345,87 @@ local function plan(s, want)
     p.high = l.each
   end
   return p
+end
+
+--- What `want` of the current step's item costs from its listings.
+local function plan(s, want)
+  return planList(s.list, want)
+end
+
+--- A commodity's listings, cheapest first, without the player's own; and how many in all.
+local function commodityList(id)
+  local list, listed = {}, 0
+  for i = 1, AH.GetNumCommoditySearchResults(id) or 0 do
+    local r = AH.GetCommoditySearchResultInfo(id, i)
+    if r and r.unitPrice then
+      local free = math.max(0, (r.quantity or 0) - (r.numOwnerItems or 0))
+      if free > 0 then
+        list[#list + 1] = { quantity = free, each = r.unitPrice }
+        listed = listed + free
+      end
+    end
+  end
+  return list, listed
+end
+
+--- An item's auctions with a buyout, cheapest first, without the player's own; and how
+--- many in all. On WoW Forever a result row stands for the writs listed at one price:
+--- buyoutAmount is the price of one, quantity how many there are, and PlaceBid buys one
+--- (a 47s row of 7 bought one writ for 47s).
+local function itemList(itemKey)
+  local list, listed = {}, 0
+  for i = 1, AH.GetNumItemSearchResults(itemKey) or 0 do
+    local r = AH.GetItemSearchResultInfo(itemKey, i)
+    if r and r.buyoutAmount and r.buyoutAmount > 0 and not r.containsOwnerItem then
+      local quantity = math.max(1, r.quantity or 1)
+      list[#list + 1] = { auctionID = r.auctionID, each = r.buyoutAmount, quantity = quantity }
+      listed = listed + quantity
+    end
+  end
+  table.sort(list, function(a, b) return a.each < b.each end)
+  return list, listed
+end
+
+--- How many of the listings are within NEAR of `expect` each.
+local function nearCount(list, expect)
+  local n = 0
+  for _, l in ipairs(list) do
+    if l.each <= expect * NEAR then n = n + l.quantity end
+  end
+  return n
+end
+
+--- The material to buy for `leads` writs or crates bought here: theirs and the ones in
+--- the bags, less the crates other materials fill and the material in the bags.
+local function materialFor(leads)
+  return math.max(0, (buy.leadHeld + leads - (buy.otherFills or 0)) * buy.count - buy.materialHeld)
+end
+
+--- On a writ's or crate's step, from its listings and its material's: how many of them,
+--- with the material they need, are listed near the prices the pages showed (`sets`);
+--- whether `want` of them needs more material than is listed near its price (`short`);
+--- and what they would cost over those prices (`extra`), with `need` material of which
+--- `matListed` are listed. nil while the material's listings are unknown.
+local function materialCheck(s, want, p)
+  local list = buy.matList
+  if not list or not s.list or #s.list == 0 then return nil end
+  local leadExpect = buy.leadExpect or s.list[1].each
+  local matExpect = buy.matExpect or (list[1] and list[1].each)
+  local leadsNear = nearCount(s.list, leadExpect)
+  local matNear = matExpect and nearCount(list, matExpect) or 0
+  -- The most writs or crates whose material the near listings (and the bags) cover.
+  local byMaterial = math.floor((matNear + buy.materialHeld) / buy.count) - buy.leadHeld
+    + (buy.otherFills or 0)
+  local need = materialFor(want)
+  local m = planList(list, need)
+  local expected = p.quantity * leadExpect + m.quantity * (matExpect or 0)
+  return {
+    sets = math.max(0, math.min(leadsNear, byMaterial)),
+    short = need > matNear,
+    extra = p.price + m.price - expected,
+    need = need,
+    matListed = m.quantity,
+  }
 end
 
 --- "35s each", or "35s to 1g each" when the prices differ.
@@ -352,7 +463,21 @@ function offer()
   local p = plan(s, want)
   s.plan = p
   local notes = {}
-  if s.lead then
+  local check = s.lead and materialCheck(s, want, p)
+  if check then
+    notes[#notes + 1] = ns.Color(GREY, ("Listed: %d, %d with material at the scanned price. In bags: %d."):format(
+      s.listed, check.sets, buy.leadHeld))
+    if check.short and want > 0 then
+      local matName = buy.matStep.name
+      local warn = check.matListed < check.need
+        and ("Not enough %s: %d listed, %d needed."):format(matName, check.matListed, check.need)
+        or ("Not enough %s near the scanned price."):format(matName)
+      if check.extra >= 1 then
+        warn = warn .. (" %s more than expected."):format(coins(check.extra))
+      end
+      notes[#notes + 1] = ns.Color(RED, warn)
+    end
+  elseif s.lead then
     notes[#notes + 1] = ns.Color(GREY, ("Listed: %d. In bags: %d."):format(s.listed, buy.leadHeld))
   elseif p.quantity < want then
     notes[#notes + 1] = ns.Color(RED, ("Only %d listed."):format(p.quantity))
@@ -386,17 +511,8 @@ end
 --- Listings of a commodity, cheapest first.
 local function commodityResults()
   local s = step()
-  s.kind, s.list, s.listed = "commodity", {}, 0
-  for i = 1, AH.GetNumCommoditySearchResults(s.id) or 0 do
-    local r = AH.GetCommoditySearchResultInfo(s.id, i)
-    if r and r.unitPrice then
-      local free = math.max(0, (r.quantity or 0) - (r.numOwnerItems or 0))
-      if free > 0 then
-        s.list[#s.list + 1] = { quantity = free, each = r.unitPrice }
-        s.listed = s.listed + free
-      end
-    end
-  end
+  s.kind = "commodity"
+  s.list, s.listed = commodityList(s.id)
   record(s, s.key)
   if s.listed == 0 then
     buy.state = "none"
@@ -406,21 +522,11 @@ local function commodityResults()
   offer()
 end
 
---- Auctions of an item sold one at a time, cheapest first. On WoW Forever a result row
---- stands for the writs listed at one price: buyoutAmount is the price of one, quantity
---- how many there are, and PlaceBid buys one (a 47s row of 7 bought one writ for 47s).
+--- Auctions of an item sold one at a time, cheapest first (see itemList).
 local function itemResults(itemKey)
   local s = step()
-  s.kind, s.list, s.listed = "item", {}, 0
-  for i = 1, AH.GetNumItemSearchResults(itemKey) or 0 do
-    local r = AH.GetItemSearchResultInfo(itemKey, i)
-    if r and r.buyoutAmount and r.buyoutAmount > 0 and not r.containsOwnerItem then
-      local quantity = math.max(1, r.quantity or 1)
-      s.list[#s.list + 1] = { auctionID = r.auctionID, each = r.buyoutAmount, quantity = quantity }
-      s.listed = s.listed + quantity
-    end
-  end
-  table.sort(s.list, function(a, b) return a.each < b.each end)
+  s.kind = "item"
+  s.list, s.listed = itemList(itemKey)
   record(s, itemKey)
   if #s.list == 0 then
     buy.state = "none"
@@ -591,6 +697,41 @@ local function browseResults(results)
   buy.state, buy.waited, buy.seen = "send", 0, {}
 end
 
+--- The material's listings for a writ's or crate's step are in (nil: none came): keep
+--- them, and their lowest price as the material's price, then search the writ or crate.
+function matDone(list)
+  buy.matList, buy.matAt = list, GetTime()
+  if list and ns.RecordPrice then
+    ns.RecordPrice(buy.matStep.id, list[1] and list[1].each or 0, buy.matKey)
+  end
+  search(false)
+end
+
+--- The browse answer for the material: its key, for the search; none listed when the
+--- whole answer is in without it.
+local function matBrowsed(results)
+  local m = buy.matStep
+  for _, r in ipairs(results or {}) do
+    if r.itemKey and r.itemKey.itemID == m.id then
+      buy.matKey, buy.state, buy.waited = r.itemKey, "matsend", 0
+      return
+    end
+  end
+  if AH.HasFullBrowseResults and not AH.HasFullBrowseResults() then return end
+  matDone({})
+end
+
+--- The material's listings, read straight from the auction house; for when the event
+--- doesn't come.
+local function pollMaterial()
+  local m = buy.matStep
+  if AH.GetNumCommoditySearchResults and (AH.GetNumCommoditySearchResults(m.id) or 0) > 0 then
+    matDone((commodityList(m.id)))
+  elseif AH.GetNumItemSearchResults and (AH.GetNumItemSearchResults(buy.matKey) or 0) > 0 then
+    matDone((itemList(buy.matKey)))
+  end
+end
+
 --- Whether the answer to the search is in, read straight from the auction house; for
 --- when the event doesn't come.
 local function pollResults()
@@ -605,10 +746,14 @@ end
 
 local BLOCKED = { ADDON_ACTION_BLOCKED = true, ADDON_ACTION_FORBIDDEN = true }
 local SEARCHING = { browse0 = true, browse = true, send = true, wait = true }
+-- Looking at a writ's or crate's material before its own search.
+local MATERIAL = { matbrowse0 = true, matbrowse = true, matsend = true, matwait = true }
 local STAGES = {
   offer = "offering", quote = "asking the price", confirm = "confirming",
   paying = "buying", next = "between auctions", failed = "stopped", none = "nothing listed",
   wait = "searching", send = "searching", browse = "browsing", browse0 = "browsing", ask = "searching",
+  matbrowse0 = "browsing the material", matbrowse = "browsing the material",
+  matsend = "searching the material", matwait = "searching the material",
 }
 
 local events = CreateFrame("Frame")
@@ -633,6 +778,11 @@ events:SetScript("OnEvent", function(_, event, ...)
     local addon, fn = ...
     if addon ~= ADDON then return end
     local where = buy.state
+    if MATERIAL[where] then
+      -- The material's search was blocked: go on without it.
+      if not buy.clickSent then searchNeedsClick = true end
+      return matDone(nil)
+    end
     if SEARCHING[where] and not buy.clickSent then
       -- A search sent outside a click: from now on, ask for one.
       searchNeedsClick = true
@@ -646,14 +796,27 @@ events:SetScript("OnEvent", function(_, event, ...)
     failed(("Blocked: %s while %s."):format(
       tostring(fn or "?"), STAGES[where] or tostring(where)))
   elseif event == "AUCTION_HOUSE_BROWSE_RESULTS_UPDATED" then
-    if buy.state == "browse" then browseResults(AH.GetBrowseResults()) end
+    if buy.state == "browse" then
+      browseResults(AH.GetBrowseResults())
+    elseif buy.state == "matbrowse" then
+      matBrowsed(AH.GetBrowseResults())
+    end
   elseif event == "AUCTION_HOUSE_BROWSE_FAILURE" then
     if buy.state == "browse" then buy.state, buy.waited = "send", 0 end
+    if buy.state == "matbrowse" then buy.state, buy.waited = "matsend", 0 end
   elseif event == "COMMODITY_SEARCH_RESULTS_UPDATED" or event == "COMMODITY_SEARCH_RESULTS_ADDED" then
-    if buy.state == "wait" and ... == s.id then commodityResults() end
+    if buy.state == "wait" and ... == s.id then
+      commodityResults()
+    elseif buy.state == "matwait" and ... == buy.matStep.id then
+      matDone((commodityList(buy.matStep.id)))
+    end
   elseif event == "ITEM_SEARCH_RESULTS_UPDATED" or event == "ITEM_SEARCH_RESULTS_ADDED" then
     local key = ...
-    if buy.state == "wait" and type(key) == "table" and key.itemID == s.id then itemResults(key) end
+    if buy.state == "wait" and type(key) == "table" and key.itemID == s.id then
+      itemResults(key)
+    elseif buy.state == "matwait" and type(key) == "table" and key.itemID == buy.matStep.id then
+      matDone((itemList(key)))
+    end
   elseif event == "AUCTION_HOUSE_SHOW_ERROR" and (buy.state == "paying" or buy.state == "quote") then
     local code = ...
     local errors = Enum and Enum.AuctionHouseError
@@ -719,6 +882,27 @@ driver:SetScript("OnUpdate", function(_, elapsed)
     else
       buy.state = "send"
     end
+  elseif buy.state == "matbrowse0" or buy.state == "matsend" then
+    if not ready then
+      if buy.waited > TIMEOUT then matDone(nil) end
+      return
+    end
+    local m = buy.matStep
+    local name = buy.state == "matbrowse0" and GetItemInfo and GetItemInfo(m.id)
+    buy.waited, buy.clickSent = 0, false
+    if name and AH.SendBrowseQuery then
+      buy.state = "matbrowse"
+      AH.SendBrowseQuery({ searchString = name, sorts = {}, filters = {}, itemClassFilters = {} })
+    else
+      buy.matKey = buy.matKey or AH.MakeItemKey(m.id)
+      buy.state = "matwait"
+      AH.SendSearchQuery(buy.matKey, sorts(), true)
+    end
+  elseif buy.state == "matbrowse" and buy.waited > TIMEOUT then
+    buy.state, buy.waited = "matsend", 0  -- no browse answer: search with a made key
+  elseif buy.state == "matwait" then
+    if buy.waited > 1.5 then pollMaterial() end
+    if buy.state == "matwait" and buy.waited > TIMEOUT then matDone(nil) end
   elseif buy.state == "browse" and buy.waited > TIMEOUT then
     buy.state, buy.waited = "send", 0  -- no browse answer: search with a made key
   elseif buy.state == "send" then
@@ -981,7 +1165,9 @@ local function buyWithMaterial(title, word, lead, material, otherFills, gain)
   if not dialog then makeDialog() end
   buy = { title = title, noun = word, steps = { leadStep, matStep }, index = 1, bought = 0,
     waited = 0, leadStep = leadStep, leadHeld = held, materialHeld = ns.Count(material.id),
-    count = material.count, otherFills = otherFills or 0, gain = gain }
+    count = material.count, otherFills = otherFills or 0, gain = gain, matStep = matStep,
+    -- The prices the pages showed, which the searches here then replace.
+    leadExpect = ns.Price(lead.id), matExpect = ns.Price(material.id) }
   search(true)  -- the click on the row
 end
 
