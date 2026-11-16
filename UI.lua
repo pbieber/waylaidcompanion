@@ -425,7 +425,13 @@ local function makeList(parent)
       local indent = entry.indent or 0
       if entry.header then
         local left, text = 6 + indent, entry.header
-        if classic then
+        row.bar:Hide()
+        if entry.minor then
+          -- A subheader: a faint band, small type, no colour bar.
+          row.stripe:SetColorTexture(1, 1, 1, classic and 0.05 or 0.04)
+          row.arrow:Hide()
+          if entry.sub then text = text .. "  " .. ns.Color(GREY, entry.sub) end
+        elseif classic then
           -- The yellow band, with a plus or minus when the group folds.
           row.stripe:SetColorTexture(1, 0.82, 0, 0.12)
           if entry.sub then text = text .. "  " .. entry.sub end
@@ -454,7 +460,11 @@ local function makeList(parent)
         row.cells[1]:ClearAllPoints()
         row.cells[1]:SetPoint("LEFT", left, 0)
         row.cells[1]:SetWidth(width - left - 6 - rightWidth)
-        row.cells[1]:SetFontObject(classic and "GameFontNormal" or "GameFontHighlight")
+        if entry.minor then
+          row.cells[1]:SetFontObject(classic and "GameFontNormalSmall" or "GameFontHighlightSmall")
+        else
+          row.cells[1]:SetFontObject(classic and "GameFontNormal" or "GameFontHighlight")
+        end
         row.cells[1]:SetText(text)
         for c = 2, CELLS do row.cells[c]:SetText("") end
         row.right:ClearAllPoints()
@@ -1264,6 +1274,8 @@ end
 
 pages.turnins = {
   title = "Turn-ins",
+  sortKey = "turninSort",
+  sorts = { { "name", "By name" }, { "cost", "By cost" } },
   footer = "scan",
   scanScope = "writs",  -- its scan and Cost switch are the writs page's
   build = function()
@@ -1279,26 +1291,14 @@ pages.turnins = {
         click = function() ns.OpenMap(camp.map) end,
       }
     end
-    -- Writ turn-ins, a continent at a time.
-    local stops = ns.Stops()
-    local order = {}
-    for i, stop in ipairs(stops) do
-      stop.continent = ns.Continent(stop.npc.map)
-      order[stop] = i
-    end
-    table.sort(stops, function(x, y)
-      if x.continent ~= y.continent then
-        -- Whatever the game can't place goes last.
-        if x.continent == "Elsewhere" then return false end
-        if y.continent == "Elsewhere" then return true end
-        return x.continent < y.continent
-      end
-      return order[x] < order[y]
-    end)
-    -- A continent's recipients, a zone at a time; each zone's header folds it away, and
-    -- at the auction house buys for all its recipients.
+    -- Writ turn-ins, a continent at a time, then a zone at a time: by name, or cheapest
+    -- first (as the Cost switch has it), the zones within their continent and the
+    -- recipients within their zone.
+    local byCost = ns.db.turninSort == "cost"
     local zones, byKey = {}, {}
-    for _, stop in ipairs(stops) do
+    for _, stop in ipairs(ns.Stops()) do
+      stop.continent = ns.Continent(stop.npc.map)
+      stop.cost = writsCost(stop.writs)
       local key = stop.continent .. ":" .. stop.npc.zone
       local zone = byKey[key]
       if not zone then
@@ -1310,37 +1310,66 @@ pages.turnins = {
       zone.open = zone.open + stop.open
       for _, writ in ipairs(stop.writs) do zone.writs[#zone.writs + 1] = writ end
     end
+    for _, zone in ipairs(zones) do zone.cost = writsCost(zone.writs) end
+    --- By cost: whole prices first, then those missing a part, no price, all handed in.
+    local function cheaper(x, y)
+      local rx, ry = x.done and 4 or costRank(x), y.done and 4 or costRank(y)
+      if rx ~= ry then return rx < ry end
+      local a, b = writValue(x), writValue(y)
+      if a and b and a ~= b then return a < b end
+      return nil
+    end
+    table.sort(zones, function(x, y)
+      if x.continent ~= y.continent then
+        -- Whatever the game can't place goes last.
+        if x.continent == "Elsewhere" then return false end
+        if y.continent == "Elsewhere" then return true end
+        return x.continent < y.continent
+      end
+      if byCost then
+        local first = cheaper(x.cost, y.cost)
+        if first ~= nil then return first end
+      end
+      return x.name < y.name
+    end)
+    for _, zone in ipairs(zones) do
+      table.sort(zone.stops, function(x, y)
+        if byCost then
+          local first = cheaper(x.cost, y.cost)
+          if first ~= nil then return first end
+        end
+        return x.npc.name < y.npc.name
+      end)
+    end
     local continent
     for _, zone in ipairs(zones) do
       if zone.continent ~= continent then
         continent = zone.continent
         entries[#entries + 1] = { header = "Craftsman's Writs: " .. continent }
       end
-      local cost = writsCost(zone.writs)
-      local head, folded = groupHeader("turnins", "zone", zone.continent .. ":" .. zone.name, zone.name,
-        nil, nil, ("%d NPC%s, %d of %d open, +%d rep"):format(#zone.stops, #zone.stops == 1 and "" or "s",
-          zone.open, #zone.writs, cost.rep))
-      head.indent = 16
-      head.key = "zone:" .. zone.continent .. ":" .. zone.name
-      head.scan = writItems(zone.writs)
-      head.value = not cost.done and writValue(cost) or nil
-      head.right = cost.done and ns.Color(GREY, "Done") or costText(cost)
-      local fold = head.click
-      head.tip = function()
-        if ns.AuctionHouseOpen() and ns.CanBuy() and zone.open > 0 then
-          return zone.name .. "\n|cff40d040Click: buy the writs open today here and their material.|r"
-        end
-      end
-      -- At the auction house: buy every recipient's writs and material here (Buy.lua).
-      head.click = function()
-        if ns.AuctionHouseOpen() and ns.CanBuy() and zone.open > 0 then
-          ns.BuyForStops(zone.stops, zone.name)
-        else
-          fold()
-        end
-      end
-      entries[#entries + 1] = head
-      for _, stop in ipairs(folded and {} or zone.stops) do
+      -- A quiet header that doesn't fold; at the auction house it buys for all the
+      -- zone's recipients (Buy.lua).
+      local cost = zone.cost
+      entries[#entries + 1] = {
+        header = zone.name,
+        minor = true,
+        indent = 16,
+        sub = ("%d NPC%s, %d of %d open, +%d rep"):format(#zone.stops, #zone.stops == 1 and "" or "s",
+          zone.open, #zone.writs, cost.rep),
+        right = cost.done and ns.Color(GREY, "Done") or costText(cost),
+        key = "zone:" .. zone.continent .. ":" .. zone.name,
+        scan = writItems(zone.writs),
+        value = not cost.done and writValue(cost) or nil,
+        tip = function()
+          if ns.AuctionHouseOpen() and ns.CanBuy() and zone.open > 0 then
+            return zone.name .. "\n|cff40d040Click: buy the writs open today here and their material.|r"
+          end
+        end,
+        click = function()
+          if ns.AuctionHouseOpen() and ns.CanBuy() and zone.open > 0 then ns.BuyForStops(zone.stops, zone.name) end
+        end,
+      }
+      for _, stop in ipairs(zone.stops) do
         local npc = stop.npc
         local names = {}
         for _, writ in ipairs(stop.writs) do
@@ -1358,7 +1387,7 @@ pages.turnins = {
         else
           status = ("%d of %d open"):format(stop.open, #stop.writs)
         end
-        local stopCost = writsCost(stop.writs)
+        local stopCost = stop.cost
         local tip = npc.name .. "\n" .. table.concat(names, "\n")
         entries[#entries + 1] = {
           icon = "Interface/Icons/INV_Misc_Note_01",

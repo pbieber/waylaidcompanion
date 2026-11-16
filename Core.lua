@@ -737,7 +737,7 @@ end
 -- average silver (ns.WRIT_POUCH). itemColor: "tier" colours
 -- writ and crate names by tier, "rarity" in the game's colour for the item. theme: "modern"
 -- draws the windows flat and dark, "classic" with the game's own frames (Theme.lua).
-local DEFAULTS = { page = "overview", writSort = "level", crateSort = "level", pins = true, ownerNames = 1,
+local DEFAULTS = { page = "overview", writSort = "level", crateSort = "level", turninSort = "name", pins = true, ownerNames = 1,
   writCost = "per", crateCost = "per", repScale = 100, favorScale = 1, crateRefund = true, writPouch = true,
   itemColor = "tier",
   theme = "modern", mailWhat = "writs" }
