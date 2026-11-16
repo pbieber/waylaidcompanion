@@ -8,7 +8,9 @@ account (bank, mail, another character), the writ's and the material's counts fo
 underneath, by character, as on the writs page.
 
 A writ's own tooltip, wherever the game shows it (bags, auction house, mail, a link in
-chat), says where it is handed in: the zone, then the NPC and where in the zone.
+chat), says what the WritTier addon did, its tier and the reputation it gives, then the
+profession and skill that make what it asks for, then where it is handed in: the zone,
+then the NPC and where in the zone.
 
 The markers are plain frames on the map's canvas, placed by hand, so nothing here goes
 through the map's own pin pools (which want XML templates and are easy to taint). On a
@@ -181,7 +183,7 @@ if WorldMapFrame.OnCanvasScaleChanged then hooksecurefunc(WorldMapFrame, "OnCanv
 ns.OnChange(refresh)
 
 -- ---------------------------------------------------------------------------
--- A writ's tooltip: where it is handed in
+-- A writ's tooltip: tier, reputation, profession, where it is handed in
 -- ---------------------------------------------------------------------------
 
 local writsOf  -- [writ item] = the writs the data lists for it (both sides at times)
@@ -204,10 +206,25 @@ local function writFor(id)
   return list[1]
 end
 
---- Add where a writ goes to an item tooltip; true when `id` is a writ.
+-- The tiers' colours, as the WritTier addon has them (the item quality colours).
+local TIER_RGB = { { 0.12, 1.00, 0.00 }, { 0.00, 0.44, 0.87 }, { 0.64, 0.21, 0.93 } }
+local GetItemInfo = (C_Item and C_Item.GetItemInfo) or GetItemInfo
+
+--- Add a writ's lines to an item tooltip: "Expert writ" and "+125 reputation", "Made
+--- with Alchemy 205", then where it is handed in. A writ the data doesn't list says its
+--- tier is unknown. True when `id` is a writ.
 local function addTurnIn(tooltip, id)
   local writ = id and writFor(id)
-  if not writ then return false end
+  if not writ then
+    local name = id and GetItemInfo and GetItemInfo(id)
+    if type(name) ~= "string" or not name:find("^Craftsman's Writ: ") then return false end
+    tooltip:AddLine("Writ tier: unknown", 0.6, 0.6, 0.6)
+    return true
+  end
+  local r, g, b = unpack(TIER_RGB[writ.tier])
+  tooltip:AddDoubleLine(ns.WRIT_TIERS[writ.tier] .. " writ", ("+%d reputation"):format(ns.WRIT_REP[writ.tier]),
+    r, g, b, 1, 0.82, 0)
+  tooltip:AddLine(("Made with %s %d"):format(writ.profession, writ.skill), 0.8, 0.8, 0.8)
   local npc = ns.WritNpc(writ)
   if npc then
     tooltip:AddLine("Turn in: " .. ns.Color("ffffffff", npc.zone), 1, 0.82, 0)
