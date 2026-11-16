@@ -7,6 +7,9 @@ When what the bags lack (the writ, or for a writ in bags its material) is elsewh
 account (bank, mail, another character), the writ's and the material's counts follow
 underneath, by character, as on the writs page.
 
+A writ's own tooltip, wherever the game shows it (bags, auction house, mail, a link in
+chat), says where it is handed in: the zone, then the NPC and where in the zone.
+
 The markers are plain frames on the map's canvas, placed by hand, so nothing here goes
 through the map's own pin pools (which want XML templates and are easy to taint). On a
 zone's own map a marker sits at its zone coordinates; on a continent map those are
@@ -176,3 +179,74 @@ WorldMapFrame:HookScript("OnShow", refresh)
 if WorldMapFrame.OnMapChanged then hooksecurefunc(WorldMapFrame, "OnMapChanged", refresh) end
 if WorldMapFrame.OnCanvasScaleChanged then hooksecurefunc(WorldMapFrame, "OnCanvasScaleChanged", refresh) end
 ns.OnChange(refresh)
+
+-- ---------------------------------------------------------------------------
+-- A writ's tooltip: where it is handed in
+-- ---------------------------------------------------------------------------
+
+local writsOf  -- [writ item] = the writs the data lists for it (both sides at times)
+
+--- The writ an item is, the one for this character's side first; nil if no writ.
+local function writFor(id)
+  if not writsOf then
+    writsOf = {}
+    for _, writ in ipairs(ns.writs) do
+      local list = writsOf[writ.writItem] or {}
+      list[#list + 1] = writ
+      writsOf[writ.writItem] = list
+    end
+  end
+  local list = writsOf[id]
+  if not list then return nil end
+  for _, writ in ipairs(list) do
+    if ns.ForPlayer(writ) then return writ end
+  end
+  return list[1]
+end
+
+--- Add where a writ goes to an item tooltip; true when `id` is a writ.
+local function addTurnIn(tooltip, id)
+  local writ = id and writFor(id)
+  if not writ then return false end
+  local npc = ns.WritNpc(writ)
+  if npc then
+    tooltip:AddLine("Turn in: " .. ns.Color("ffffffff", npc.zone), 1, 0.82, 0)
+    tooltip:AddLine(("%s (%.1f, %.1f)"):format(npc.name, npc.x, npc.y), 0.6, 0.6, 0.6)
+  else
+    tooltip:AddLine("Turn in: unknown. Saved when you accept the quest.", 0.6, 0.6, 0.6, true)
+  end
+  return true
+end
+
+local function itemID(link)
+  return type(link) == "string" and tonumber(link:match("item:(%d+)")) or nil
+end
+
+if TooltipDataProcessor and TooltipDataProcessor.AddTooltipPostCall and Enum and Enum.TooltipDataType then
+  TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Item, function(tooltip, data)
+    if tooltip and tooltip.AddLine and data then pcall(addTurnIn, tooltip, data.id) end
+  end)
+else
+  -- Older clients: when the tooltip is set to an item. That can come twice for one item,
+  -- so a tooltip takes the lines once until it is cleared.
+  local added = setmetatable({}, { __mode = "k" })
+  for _, tooltip in ipairs({ GameTooltip, ItemRefTooltip }) do
+    if tooltip and tooltip.HookScript and tooltip:HasScript("OnTooltipSetItem") then
+      -- Without word of the tooltip clearing, every time: twice beats never again.
+      local clears = tooltip:HasScript("OnTooltipCleared")
+      tooltip:HookScript("OnTooltipSetItem", function(self)
+        local _, link = self:GetItem()
+        local id = itemID(link)
+        if not id or (clears and added[self] == id) then return end
+        local ok, isWrit = pcall(addTurnIn, self, id)
+        if ok and isWrit then
+          added[self] = id
+          self:Show()  -- room for the lines
+        end
+      end)
+      if clears then
+        tooltip:HookScript("OnTooltipCleared", function(self) added[self] = nil end)
+      end
+    end
+  end
+end
