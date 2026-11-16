@@ -17,6 +17,7 @@ ns.RECORDED_NPCS = {
   [9272] = { "Spark Nilminer", 1449, 43.5, 7.43, "Un'Goro Crater" },
   [10924] = { "Ivy Leafrunner", 1448, 50.95, 81.58, "Felwood" },
   [11438] = { "Bibbly F'utzbuckle", 1443, 62.31, 38.96, "Desolace" },
+  [11795] = { "Mylentha Riverbend", 1450, 51.76, 32.58, "Moonglade" },
   [11802] = { "Dendrite Starblaze", 1450, 56.22, 30.65, "Moonglade" },
   [11805] = { "Jarund Stoutstrider", 1451, 82.06, 18.07, "Silithus" },
   [12029] = { "Narianna", 1450, 53.36, 42.72, "Moonglade" },
@@ -24,6 +25,7 @@ ns.RECORDED_NPCS = {
   [14624] = { "Master Smith Burninate", 1427, 38.82, 28.5, "Searing Gorge" },
   [14634] = { "Lookout Captain Lolo Longstriker", 1427, 37.75, 26.55, "Searing Gorge" },
   [14743] = { "Jhordy Lapforge", 1446, 52.29, 26.89, "Tanaris" },
+  [15175] = { "Khur Hornstriker", 1451, 48.67, 37.01, "Silithus" },
   [261961] = { "Hekshi", 1434, 50.66, 19.26, "Stranglethorn Vale" },
   [262072] = { "The Ravenous", 1445, 53.99, 56.48, "Dustwallow Marsh" },
   [262143] = { "Scout Raroul", 1444, 72.41, 52.47, "Feralas" },
@@ -35,6 +37,7 @@ ns.RECORDED_NPCS = {
   [642320] = { "Battered Trunk", 1431, 26.27, 36.19, "Duskwood" },
   ["at:1418:619:542"] = { "Writ customer", 1418, 61.94, 54.24, "Badlands" },
   ["at:1419:518:356"] = { "Writ customer", 1419, 51.8, 35.66, "Blasted Lands" },
+  ["at:1422:595:531"] = { "Writ customer", 1422, 59.57, 53.15, "Western Plaguelands" },
   ["at:1422:657:761"] = { "Writ customer", 1422, 65.74, 76.1, "Western Plaguelands" },
   ["at:1425:269:485"] = { "Writ customer", 1425, 26.94, 48.57, "The Hinterlands" },
   ["at:1428:124:316"] = { "Writ customer", 1428, 12.44, 31.65, "Burning Steppes" },
@@ -44,7 +47,9 @@ ns.RECORDED_NPCS = {
   ["at:1440:647:801"] = { "Writ customer", 1440, 64.77, 80.15, "Ashenvale" },
   ["at:1443:388:271"] = { "Writ customer", 1443, 38.89, 27.16, "Desolace" },
   ["at:1443:623:389"] = { "Writ customer", 1443, 62.31, 38.96, "Desolace" },
-  ["at:1450:517:325"] = { "Writ customer", 1450, 51.76, 32.58, "Moonglade" },
+  ["at:1445:409:278"] = { "Writ customer", 1445, 40.99, 27.88, "Dustwallow Marsh" },
+  ["at:1451:671:697"] = { "Writ customer", 1451, 67.19, 69.77, "Silithus" },
+  ["at:1452:576:880"] = { "Writ customer", 1452, 57.62, 88.08, "Winterspring" },
 }
 
 -- [writ quest] = place
@@ -83,6 +88,7 @@ ns.RECORDED_WRITS = {
   [94267] = 9272, -- Wildvine Potion
   [94268] = "at:1432:430:865", -- Steel Plate Helm
   [94269] = 11438, -- Inlaid Mithril Cylinder
+  [94270] = "at:1445:409:278", -- Steel Weapon Chain
   [94274] = 262284, -- Golden Scale Coif
   [94275] = 14624, -- Solid Sharpening Stone
   [94277] = 7408, -- Truesilver Rod
@@ -103,7 +109,7 @@ ns.RECORDED_WRITS = {
   [94298] = 262284, -- Swift Boots
   [94303] = 9272, -- Thick Leather Ammo Pouch
   [94304] = 2817, -- Mageweave Bag
-  [94309] = "at:1450:517:325", -- Star Belt
+  [94309] = 11795, -- Star Belt
   [94310] = 262284, -- Black Mageweave Vest
   [94311] = 14634, -- Red Mageweave Pants
   [94312] = 262379, -- Orange Martial Shirt
@@ -111,8 +117,12 @@ ns.RECORDED_WRITS = {
   [94317] = "at:1419:518:356", -- Dreamless Sleep Potion
   [94318] = "at:1428:124:316", -- Greater Fire Protection Potion
   [94322] = 11805, -- Limited Invulnerability Potion
+  [94323] = "at:1422:595:531", -- Major Rejuvenation Potion
+  [94340] = 15175, -- Truesilver Transformer
   [94341] = "at:1422:657:761", -- Sniper Scope
   [94355] = "at:1430:469:753", -- Tuxedo Jacket
+  [94358] = "at:1451:671:697", -- Shadoweave Mask
+  [94360] = "at:1452:576:880", -- Soul Pouch
 }
 
 -- Writs Data/Writs.lua limits to one side that players have had on the other:
@@ -478,7 +488,7 @@ ns.RECORDED_REWARDS = {
     } },
   },
   ["Durotar Supply and Logistics"] = {
-    [248196] = { npc = "Apothecary Durelle", time = 1794566616, items = {
+    [248196] = { npc = "Apothecary Durelle", time = 1794798632, items = {
       { id = 250381, name = "Recipe: Elixir of Lesser Spirit", price = 0, quantity = 1, costs = { { value = 45, name = "Merchant's Favor", icon = 135725 } } },
       { id = 250978, name = "Recipe: Spellblasting Potion", price = 0, quantity = 1, costs = { { value = 45, name = "Merchant's Favor", icon = 135725 } } },
       { id = 250990, name = "Recipe: Mender's Potion", price = 0, quantity = 1, costs = { { value = 45, name = "Merchant's Favor", icon = 135725 } } },
@@ -596,7 +606,7 @@ ns.RECORDED_REWARDS = {
       { id = 21219, name = "Recipe: Sagefish Delight", price = 5000, quantity = 1, costs = {} },
       { id = 4536, name = "Shiny Red Apple", price = 25, quantity = 5, costs = {} },
     } },
-    [248199] = { npc = "Beneris", time = 1794627679, items = {
+    [248199] = { npc = "Beneris", time = 1794813878, items = {
       { id = 249479, name = "Formula: Enchant Weapon - Insight", price = 0, quantity = 1, costs = { { value = 45, name = "Merchant's Favor", icon = 135725 } } },
       { id = 249483, name = "Formula: Soulstaff", price = 0, quantity = 1, costs = { { value = 45, name = "Merchant's Favor", icon = 135725 } } },
       { id = 249485, name = "Formula: Orb of Souls", price = 0, quantity = 1, costs = { { value = 45, name = "Merchant's Favor", icon = 135725 } } },
@@ -752,7 +762,7 @@ ns.RECORDED_REWARDS = {
       { id = 252853, name = "Pattern: Prowler's Leather Bracers", price = 0, quantity = 1, standing = 6, costs = { { value = 90, name = "Merchant's Favor", icon = 135725 } } },
       { id = 271626, name = "Leatherworking Certification", price = 0, quantity = 1, costs = { { value = 1000, name = "Merchant's Favor", icon = 135725 } } },
     } },
-    [248202] = { npc = "Jim'bek", time = 1794575396, items = {
+    [248202] = { npc = "Jim'bek", time = 1794759661, items = {
       { id = 253892, name = "Pattern: Silky Boots", price = 0, quantity = 1, costs = { { value = 30, name = "Merchant's Favor", icon = 135725 } } },
       { id = 253898, name = "Pattern: Pearly Boots", price = 0, quantity = 1, costs = { { value = 30, name = "Merchant's Favor", icon = 135725 } } },
       { id = 253890, name = "Pattern: Pristine Boots", price = 0, quantity = 1, costs = { { value = 30, name = "Merchant's Favor", icon = 135725 } } },
