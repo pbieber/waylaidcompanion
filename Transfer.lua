@@ -125,6 +125,11 @@ local function emptySlot(kind)
   end
 end
 
+--- An empty slot in the bags (Craft.lua lays a material's stacks out there): { bag, slot }.
+function ns.EmptyBagSlot()
+  return emptySlot("bags")
+end
+
 --- Whether a slot is still settling: locked, and not because it is attached to the mail.
 local function anyLocked(kind, attached)
   for _, s in ipairs(slots(kind)) do
