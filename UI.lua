@@ -1247,6 +1247,7 @@ local function writsCost(writs)
     out.partial = out.partial or cost.partial
     out.old = out.old or cost.old
   end
+  out.rep = rep
   if priced then out.net, out.perRep = net, net / rep end
   return out
 end
@@ -1317,8 +1318,8 @@ pages.turnins = {
       end
       local cost = writsCost(zone.writs)
       local head, folded = groupHeader("turnins", "zone", zone.continent .. ":" .. zone.name, zone.name,
-        nil, nil, ("%d NPC%s, %d of %d open"):format(#zone.stops, #zone.stops == 1 and "" or "s",
-          zone.open, #zone.writs))
+        nil, nil, ("%d NPC%s, %d of %d open, +%d rep"):format(#zone.stops, #zone.stops == 1 and "" or "s",
+          zone.open, #zone.writs, cost.rep))
       head.indent = 16
       head.key = "zone:" .. zone.continent .. ":" .. zone.name
       head.scan = writItems(zone.writs)
