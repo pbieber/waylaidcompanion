@@ -118,6 +118,14 @@ local current         -- { recipe, crafts }: what the Craft button does
 local dialog
 local stacking        -- { item, need, moves, wait, locked }: stacks being put together
 local stackFailed = {}  -- [item] = GetTime() when putting its stacks together failed
+-- A fill under way: { phase = "cast" (the cast running) or "settle" (cast done, the bags
+-- not yet updated), at = GetTime() }. The Fill button waits meanwhile: clicked during the
+-- cast it uses the crate again, and just after it, it still names the stack from before
+-- the fill, which may be gone or short. Either way the game says the item is no target.
+local filling
+local fillClicked = 0   -- GetTime() of the last click on Fill
+local FILL_CAST = 10    -- seconds a fill's cast may take before the button stops waiting
+local FILL_SETTLE = 2   -- seconds to wait for the bags after a fill
 
 local Container = C_Container
 local Pickup = (Container and Container.PickupContainerItem) or PickupContainerItem
@@ -373,7 +381,7 @@ function refresh()
     lines[2] = ns.Color(GREY, "One click fills one crate. Click again after the cast.")
   end
   -- The stack to fill from; none while the stacks are put together.
-  local stack = fills > 0 and not inCombat() and fillStack(bundle) or nil
+  local stack = fills > 0 and not inCombat() and not filling and fillStack(bundle) or nil
   local putting = stacking and stacking.item == bundle.item
   if putting then
     table.insert(lines, 2, ns.Color(GOLD, ("Stacking %s: %d a crate, so no stack is left short."):format(
@@ -382,7 +390,7 @@ function refresh()
   -- A secure button can't be changed in combat; it is set again when the fight ends.
   if not inCombat() then
     local fill = dialog.fill
-    if fills > 0 and not putting then
+    if fills > 0 and not putting and not filling then
       fill:SetAttribute("type", "item")
       fill:SetAttribute("item", "item:" .. crate.item)
       fill:SetAttribute("target-item", "item:" .. bundle.item)
@@ -393,7 +401,7 @@ function refresh()
       fill:Enable()
     else
       fill:SetAttribute("type", nil)
-      fill:SetText(putting and "Stacking material..." or "Fill a crate")
+      fill:SetText(filling and "Filling..." or putting and "Stacking material..." or "Fill a crate")
       fill:Disable()
     end
   end
@@ -565,6 +573,15 @@ local function makeDialog()
     fill:SetScript("OnEnable", function() back:SetColorTexture(accent[1], accent[2], accent[3], 0.22) end)
   end
   fill:SetText("Fill a crate")
+  -- Before the click's action (which comes on the press or the release): a click while a
+  -- fill is under way does nothing.
+  fill:SetScript("PreClick", function(self)
+    if filling then
+      if not inCombat() then self:SetAttribute("type", nil) end
+    else
+      fillClicked = GetTime()
+    end
+  end)
   dialog.fill = fill
 
   dialog.craft = ns.Skin.Button(dialog, "Craft", 250, 22)
@@ -650,6 +667,46 @@ events:SetScript("OnEvent", function(_, event, addon, fn)
       if stale then index() end
       refresh()
     end)
+  end
+end)
+
+-- The fill's cast: the player's cast that starts just after a click on Fill. Its end, and
+-- the bags updating after it, let the button go again.
+local fillEvents = CreateFrame("Frame")
+for _, event in ipairs({ "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_STOP", "UNIT_SPELLCAST_SUCCEEDED",
+  "UNIT_SPELLCAST_FAILED", "UNIT_SPELLCAST_INTERRUPTED", "BAG_UPDATE_DELAYED" }) do
+  pcall(fillEvents.RegisterEvent, fillEvents, event)
+end
+fillEvents:SetScript("OnEvent", function(_, event, unit)
+  if event == "BAG_UPDATE_DELAYED" then
+    if filling and filling.phase == "settle" then
+      filling = nil
+      refresh()
+    end
+    return
+  end
+  if unit ~= "player" then return end
+  if event == "UNIT_SPELLCAST_START" then
+    if dialog and dialog:IsShown() and GetTime() - fillClicked < 1 then
+      filling = { phase = "cast", at = GetTime() }
+      refresh()
+    end
+  elseif not filling then
+    return
+  elseif event == "UNIT_SPELLCAST_STOP" or event == "UNIT_SPELLCAST_SUCCEEDED" then
+    if filling.phase == "cast" then filling = { phase = "settle", at = GetTime() } end
+  else
+    filling = nil  -- failed or interrupted: nothing was used
+    refresh()
+  end
+end)
+-- When an event doesn't come: the button doesn't wait for ever.
+fillEvents:SetScript("OnUpdate", function()
+  if not filling then return end
+  local limit = filling.phase == "cast" and FILL_CAST or FILL_SETTLE
+  if GetTime() - filling.at > limit then
+    filling = nil
+    refresh()
   end
 end)
 
