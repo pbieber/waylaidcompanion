@@ -48,6 +48,9 @@ local RED, GREY = "ffff4040", "ff808080"
 
 local buy = nil       -- the purchase under way, or nil
 local dialog
+-- The window's layout: its height, where the notes start, and the height of the favor
+-- or reputation row the writ or crate step adds above them.
+local DIALOG_HEIGHT, NOTES_TOP, GAIN_ROW = 230, -132, 30
 
 --- Whether this client lets the addon buy at the auction house.
 function ns.CanBuy()
@@ -110,7 +113,8 @@ end
 ---   about   the price is an estimate from the listings
 ---   status  a line in place of the price
 ---   qty     the quantity beside the item
----   edit    the quantity is the writ or crate count the player sets (with Max)
+---   edit    the quantity is the writ or crate count the player sets (with Max), or the
+---           favor or reputation it buys, below it
 ---   notes   lines under the item
 ---   action  the Buy button's label (nil disables it)
 local function show(view)
@@ -137,6 +141,26 @@ local function show(view)
     dialog.count:Show()
     dialog.count:SetText(tostring(view.qty or s.need or 0))
   end
+
+  -- The favor or reputation the writs or crates buy, on their step. Left alone while
+  -- typed in, so the count it comes to doesn't overwrite it; set right when the box is
+  -- left. The window keeps one height through the purchase.
+  local gain = s.lead and buy.gain
+  if gain then
+    dialog.gain.label:SetText(gain.label .. ":")
+    dialog.gain.each:SetText(ns.Color(GREY, ("%d per %s"):format(gain.each, buy.noun)))
+    if not dialog.gain.box:HasFocus() then dialog.gain.box:SetText(tostring((view.qty or 0) * gain.each)) end
+    if dialog.gain.box.SetEnabled then dialog.gain.box:SetEnabled(view.edit == true) end
+    dialog.gain.box:SetAlpha(view.edit and 1 or 0.5)
+    dialog.gain:Show()
+  else
+    dialog.gain:Hide()
+  end
+  local notesTop = gain and NOTES_TOP - GAIN_ROW or NOTES_TOP
+  dialog.notes:ClearAllPoints()
+  dialog.notes:SetPoint("TOPLEFT", 16, notesTop)
+  dialog.notes:SetPoint("TOPRIGHT", -16, notesTop)
+  dialog:SetHeight(buy.gain and DIALOG_HEIGHT + GAIN_ROW or DIALOG_HEIGHT)
 
   local notes = {}
   local given = view.notes or {}
@@ -732,11 +756,18 @@ local function setWant(value)
   offer()
 end
 
+--- The favor or reputation typed in: as many writs or crates as reach it.
+local function setGain(value)
+  local gain = buy and buy.gain
+  if not gain then return end
+  setWant(math.ceil((tonumber(value) or 0) / gain.each))
+end
+
 local function makeDialog()
   -- A child of the game's auction house window, like the buy buttons of other auction
   -- addons.
   local parent = AuctionHouseFrame or UIParent
-  dialog = ns.Skin.Window("PuggerWaylaidCompanionBuy", parent, 440, 230, "Buy")
+  dialog = ns.Skin.Window("PuggerWaylaidCompanionBuy", parent, 440, DIALOG_HEIGHT, "Buy")
   dialog:SetPoint("CENTER", parent, "CENTER", 0, 0)
   dialog:SetToplevel(true)
   dialog:SetFrameStrata("DIALOG")
@@ -813,9 +844,38 @@ local function makeDialog()
   dialog.name:SetPoint("RIGHT", dialog.max, "LEFT", -8, 0)
   dialog.name:SetJustifyH("LEFT")
 
+  -- Below the item, for writs and crates: the reputation or favor they buy, typed in
+  -- to buy as many as reach it.
+  dialog.gain = CreateFrame("Frame", nil, dialog)
+  dialog.gain:SetPoint("TOPLEFT", 16, NOTES_TOP + 4)
+  dialog.gain:SetPoint("TOPRIGHT", -16, NOTES_TOP + 4)
+  dialog.gain:SetHeight(GAIN_ROW)
+  dialog.gain:Hide()
+  dialog.gain.label = dialog.gain:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+  dialog.gain.label:SetPoint("LEFT", 0, 0)
+  dialog.gain.box = CreateFrame("EditBox", nil, dialog.gain, "InputBoxTemplate")
+  dialog.gain.box:SetSize(60, 20)
+  dialog.gain.box:SetPoint("LEFT", dialog.gain.label, "RIGHT", 12, 0)
+  dialog.gain.box:SetAutoFocus(false)
+  dialog.gain.box:SetNumeric(true)
+  dialog.gain.box:SetMaxLetters(6)
+  dialog.gain.box:SetJustifyH("CENTER")
+  dialog.gain.box:SetScript("OnTextChanged", function(self, userInput)
+    if userInput then setGain(self:GetText()) end
+  end)
+  dialog.gain.box:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
+  dialog.gain.box:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+  -- Left: what the count it came to buys (fewer when not that many are listed).
+  dialog.gain.box:SetScript("OnEditFocusLost", function(self)
+    local s = step()
+    if buy and buy.gain and s and s.lead then self:SetText(tostring((s.want or 0) * buy.gain.each)) end
+  end)
+  dialog.gain.each = dialog.gain:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+  dialog.gain.each:SetPoint("LEFT", dialog.gain.box, "RIGHT", 10, 0)
+
   dialog.notes = dialog:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-  dialog.notes:SetPoint("TOPLEFT", 16, -132)
-  dialog.notes:SetPoint("TOPRIGHT", -16, -132)
+  dialog.notes:SetPoint("TOPLEFT", 16, NOTES_TOP)
+  dialog.notes:SetPoint("TOPRIGHT", -16, NOTES_TOP)
   dialog.notes:SetJustifyH("LEFT")
   dialog.notes:SetJustifyV("TOP")
 
@@ -907,8 +967,9 @@ end
 --- Buy a writ or crate (the lead) and its material: the lead's count is set in the
 --- window (one to start with when the bags hold none), the material follows it.
 --- lead { id, name }, material { id, name, count (per lead) }; otherFills: leads that
---- other material in the bags fills already.
-local function buyWithMaterial(title, word, lead, material, otherFills)
+--- other material in the bags fills already; gain { label, each }: the reputation or favor
+--- one lead gives, nil when unknown.
+local function buyWithMaterial(title, word, lead, material, otherFills, gain)
   if not canStart() then return end
   local held = ns.Count(lead.id)
   local leadName, leadIcon = ns.Item(lead.id, lead.name)
@@ -920,14 +981,15 @@ local function buyWithMaterial(title, word, lead, material, otherFills)
   if not dialog then makeDialog() end
   buy = { title = title, noun = word, steps = { leadStep, matStep }, index = 1, bought = 0,
     waited = 0, leadStep = leadStep, leadHeld = held, materialHeld = ns.Count(material.id),
-    count = material.count, otherFills = otherFills or 0 }
+    count = material.count, otherFills = otherFills or 0, gain = gain }
   search(true)  -- the click on the row
 end
 
 --- Buy writs and their material.
 function ns.BuyForWrit(writ)
   buyWithMaterial(writ.name, "writ", { id = writ.writItem, name = "Writ: " .. writ.name },
-    { id = writ.item, name = writ.name, count = writ.count })
+    { id = writ.item, name = writ.name, count = writ.count }, nil,
+    { label = "Reputation", each = ns.WRIT_REP[writ.tier] })
 end
 
 --- Buy crates and their cheapest material, by the prices known now (the search for it
@@ -944,11 +1006,13 @@ function ns.BuyForCrate(crate)
     end
   end
   if not bundle then return end
+  local favor = ns.CrateFavor(crate)
   local others = 0
   for _, b in ipairs(crate.bundles) do
     if b ~= bundle then others = others + math.floor(ns.Count(b.item) / b.count) end
   end
   buyWithMaterial("Waylaid Crate: " .. crate.name, "crate",
     { id = crate.item, name = "Waylaid Crate: " .. crate.name },
-    { id = bundle.item, name = bundle.name, count = bundle.count }, others)
+    { id = bundle.item, name = bundle.name, count = bundle.count }, others,
+    (favor or 0) > 0 and { label = "Merchant's Favor", each = favor } or nil)
 end
