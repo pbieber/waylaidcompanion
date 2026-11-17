@@ -7,10 +7,13 @@ The Options page: how the writs and crates pages show cost, and how characters a
     the quest reward silver comes off the cost.
   Per rep or favor, or in all: the Cost button at the foot of the writs and crates pages.
   - Items: names coloured by writ or crate tier, or by the item's rarity as in game.
+  - World map: the turn-in markers' size, whether they show (the same setting as the
+    minimap button's right-click), and whether they grow as the map zooms in.
   - Characters: "Show both names" (first name and surname) in the Owned columns.
   - Window: the modern or the classic style (after a reload), and the columns' order.
 
-ns.BuildOptions makes the frame; UI.lua places it and calls its Refresh.
+ns.BuildOptions makes the frame; UI.lua places it and calls its Refresh. The page is
+taller than the window, so it scrolls.
 ]]
 
 local _, ns = ...
@@ -30,7 +33,14 @@ local LABEL_W = 110
 local BUTTON_W = 116
 
 function ns.BuildOptions(parent, width)
-  local f = CreateFrame("Frame", nil, parent)
+  -- The page is taller than the window: what's on it scrolls (f), inside the panel.
+  local panel = CreateFrame("Frame", nil, parent)
+  local scroll = CreateFrame("ScrollFrame", nil, panel, "UIPanelScrollFrameTemplate")
+  scroll:SetPoint("TOPLEFT")
+  scroll:SetPoint("BOTTOMRIGHT", -24, 0)
+  local f = CreateFrame("Frame", nil, scroll)
+  f:SetSize(width - 24, 10)
+  scroll:SetScrollChild(f)
   local controls = {}  -- each with a Refresh
 
   local function heading(text, top)
@@ -60,7 +70,8 @@ function ns.BuildOptions(parent, width)
       b:SetPoint("TOPLEFT", 10 + LABEL_W + (i - 1) * (BUTTON_W + 4), top)
       b:SetScript("OnClick", function()
         ns.db[key] = c[1]
-        f:Refresh()
+        panel:Refresh()
+        ns.Changed()
       end)
       buttons[i] = b
     end
@@ -83,12 +94,12 @@ function ns.BuildOptions(parent, width)
     return list
   end
 
-  --- A box on a row of its own for a setting that is on unless set to false, with a "(?)"
-  --- after its label: hover it for `fill`, which writes the tooltip.
-  local function checkbox(top, key, label, fill)
+  --- A box for a setting that is on unless set to false, with a "(?)" after its label:
+  --- hover it for `fill`, which writes the tooltip. At the row's start, or `left` further in.
+  local function checkbox(top, key, label, fill, left)
     local box = CreateFrame("CheckButton", nil, f, "UICheckButtonTemplate")
     box:SetSize(24, 24)
-    box:SetPoint("TOPLEFT", 6 + LABEL_W, top + 2)
+    box:SetPoint("TOPLEFT", 6 + LABEL_W + (left or 0), top + 2)
     local text = box:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     text:SetPoint("LEFT", box, "RIGHT", 2, 0)
     text:SetText(label)
@@ -111,6 +122,7 @@ function ns.BuildOptions(parent, width)
     end)
     box:SetScript("OnClick", function(self)
       ns.db[key] = self:GetChecked() and true or false
+      ns.Changed()
     end)
     controls[#controls + 1] = { Refresh = function() box:SetChecked(ns.db[key] ~= false) end }
   end
@@ -163,6 +175,25 @@ function ns.BuildOptions(parent, width)
     top - 28 - ROW)
 
   top = top - 28 - ROW - 46
+  heading("World map", top)
+  choice("Marker size", top - 28, "pinScale",
+    { { 0.75, "75%" }, { 1, "100%" }, { 1.25, "125%" }, { 1.5, "150%" } })
+  -- Below: whether the markers show at all, and whether they grow as the map zooms in.
+  checkbox(top - 28 - ROW, "pins", "Show turn-in markers", function()
+    GameTooltip:SetText("Turn-in markers", 1, 0.82, 0)
+    GameTooltip:AddLine("A marker on the world map for each NPC that takes your writs, and one "
+      .. "for your crate camp. Right-click the minimap button, or /pwc map, to show or hide "
+      .. "them too.", 1, 1, 1, true)
+  end)
+  checkbox(top - 28 - ROW, "pinZoom", "Grow when zoomed in", function()
+    GameTooltip:SetText("Grow when zoomed in", 1, 0.82, 0)
+    GameTooltip:AddLine(("Markers get bigger as you zoom in on the map, up to %d%% more at the "
+      .. "closest zoom. Unticked: they stay one size."):format(50), 1, 1, 1, true)
+  end, 2 * (BUTTON_W + 4))
+  note("The size of the markers for writ turn-ins and the crate camp on the world map, "
+    .. "zoomed out.", top - 28 - 2 * ROW)
+
+  top = top - 28 - 2 * ROW - 34
   heading("Characters", top)
   local names = CreateFrame("CheckButton", nil, f, "UICheckButtonTemplate")
   names:SetSize(24, 24)
@@ -206,10 +237,11 @@ function ns.BuildOptions(parent, width)
   end)
   note("On any list, drag a column's heading onto another to move the column there. "
     .. "Each page remembers its own order.", top - 28 - 2 * ROW)
+  f:SetHeight(-(top - 28 - 2 * ROW) + 30)
 
-  function f:Refresh()
+  function panel:Refresh()
     for _, c in ipairs(controls) do c.Refresh() end
   end
 
-  return f
+  return panel
 end

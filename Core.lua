@@ -737,7 +737,10 @@ end
 -- average silver (ns.WRIT_POUCH). itemColor: "tier" colours
 -- writ and crate names by tier, "rarity" in the game's colour for the item. theme: "modern"
 -- draws the windows flat and dark, "classic" with the game's own frames (Theme.lua).
+-- pins: the world map's turn-in markers are shown (also the minimap button's right-click);
+-- pinScale their size; pinZoom: they grow as the map zooms in (Map.lua).
 local DEFAULTS = { page = "overview", writSort = "level", crateSort = "level", turninSort = "name", pins = true, ownerNames = 1,
+  pinScale = 1, pinZoom = true,
   writCost = "per", crateCost = "per", repScale = 100, favorScale = 1, crateRefund = true, writPouch = true,
   itemColor = "tier",
   theme = "modern", mailWhat = "writs" }

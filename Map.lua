@@ -15,13 +15,15 @@ then the NPC and where in the zone.
 The markers are plain frames on the map's canvas, placed by hand, so nothing here goes
 through the map's own pin pools (which want XML templates and are easy to taint). On a
 zone's own map a marker sits at its zone coordinates; on a continent map those are
-converted through world coordinates.
+converted through world coordinates. Options: the markers' size, whether they grow as the
+map zooms in, and whether they show at all (also the minimap button's right-click).
 ]]
 
 local _, ns = ...
 if not CreateFrame or not WorldMapFrame then return end
 
 local SIZE = 22
+local ZOOM_GROW = 0.5 -- how much bigger markers get at the map's closest zoom (Options: grow)
 local CONTINENT = 2 -- Enum.UIMapType.Continent
 
 local pins = {}
@@ -145,9 +147,18 @@ local function refresh()
     if camp then
       stops[#stops + 1] = { npc = camp, camp = true, writs = {}, open = 1, held = 0 }
     end
-    -- The canvas grows as the map zooms in; shrink the markers back so they stay one size.
+    -- The canvas grows as the map zooms in; shrink the markers back to the size the
+    -- options ask for, and with "grow" let them get up to ZOOM_GROW bigger at full zoom.
     local zoom = parent:GetScale()
     if not zoom or zoom <= 0 then zoom = 1 end
+    local size = ns.db.pinScale or 1
+    if ns.db.pinZoom ~= false and WorldMapFrame.GetCanvasZoomPercent then
+      local ok, percent = pcall(WorldMapFrame.GetCanvasZoomPercent, WorldMapFrame)
+      if ok and type(percent) == "number" then
+        size = size * (1 + ZOOM_GROW * math.max(0, math.min(1, percent)))
+      end
+    end
+    local scale = size / zoom
     local width, height = parent:GetWidth(), parent:GetHeight()
 
     for _, stop in ipairs(stops) do
@@ -162,9 +173,10 @@ local function refresh()
         pin.stop = stop
         -- Above the map's own pins, in whatever strata the map is in.
         pin:SetFrameLevel(math.min(9000, parent:GetFrameLevel() + 3000))
-        pin:SetScale(1 / zoom)
+        -- Offsets count in the marker's own scale.
+        pin:SetScale(scale)
         pin:ClearAllPoints()
-        pin:SetPoint("CENTER", parent, "TOPLEFT", x * width * zoom, -y * height * zoom)
+        pin:SetPoint("CENTER", parent, "TOPLEFT", x * width / scale, -y * height / scale)
         pin.icon:SetTexture(stop.camp and "Interface/Icons/INV_Crate_01" or "Interface/Icons/INV_Misc_Note_01")
         local done = stop.open == 0
         if pin.icon.SetDesaturated then pin.icon:SetDesaturated(done) end
