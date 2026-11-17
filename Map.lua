@@ -165,17 +165,27 @@ local function showTooltip(pin)
   GameTooltip:Show()
 end
 
+ns.MARKER_SIZE = SIZE
+ns.MARKER_ICON = "Interface/Icons/INV_Misc_Note_01"
+
+--- A marker's look on `frame` (frame.disc, frame.icon): an icon on a dark disc, the icon
+--- filling the frame. Also the Options page's preview.
+function ns.MarkerArt(frame)
+  frame.disc = frame:CreateTexture(nil, "BACKGROUND")
+  frame.disc:SetTexture("Interface/Minimap/UI-Minimap-Background")
+  frame.disc:SetPoint("TOPLEFT", -2, 2)
+  frame.disc:SetPoint("BOTTOMRIGHT", 2, -2)
+  frame.icon = frame:CreateTexture(nil, "ARTWORK")
+  frame.icon:SetAllPoints()
+  frame.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+  frame.icon:SetTexture(ns.MARKER_ICON)
+end
+
 local function makePin(parent)
   local pin = CreateFrame("Frame", nil, parent)
   pin:SetSize(SIZE, SIZE)
   pin:EnableMouse(true)
-  pin.disc = pin:CreateTexture(nil, "BACKGROUND")
-  pin.disc:SetTexture("Interface/Minimap/UI-Minimap-Background")
-  pin.disc:SetPoint("TOPLEFT", -2, 2)
-  pin.disc:SetPoint("BOTTOMRIGHT", 2, -2)
-  pin.icon = pin:CreateTexture(nil, "ARTWORK")
-  pin.icon:SetAllPoints()
-  pin.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+  ns.MarkerArt(pin)
   -- A ring that lights up when the player is carrying a writ for this place.
   pin.glow = pin:CreateTexture(nil, "OVERLAY")
   pin.glow:SetTexture("Interface/Buttons/UI-ActionButton-Border")
@@ -235,7 +245,7 @@ local function refresh()
         pin:SetScale(scale)
         pin:ClearAllPoints()
         pin:SetPoint("CENTER", parent, "TOPLEFT", x * width / scale, -y * height / scale)
-        pin.icon:SetTexture(stop.camp and "Interface/Icons/INV_Crate_01" or "Interface/Icons/INV_Misc_Note_01")
+        pin.icon:SetTexture(stop.camp and "Interface/Icons/INV_Crate_01" or ns.MARKER_ICON)
         local done = stop.open == 0
         if pin.icon.SetDesaturated then pin.icon:SetDesaturated(done) end
         pin.icon:SetAlpha(done and 0.6 or 1)

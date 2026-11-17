@@ -7,8 +7,8 @@ The Options page: how the writs and crates pages show cost, and how characters a
     the quest reward silver comes off the cost.
   Per rep or favor, or in all: the Cost button at the foot of the writs and crates pages.
   - Items: names coloured by writ or crate tier, or by the item's rarity as in game.
-  - World map: the turn-in markers' size (50 to 150%; on OpenMap's map times its Icon
-    size), whether they show (the same setting as the minimap button's right-click), and
+  - World map: the turn-in markers' size (a slider, 50 to 200%, with a marker drawn at
+    that size beside it; on OpenMap's map times its Icon size), whether they show (the same setting as the minimap button's right-click), and
     whether they grow as the map zooms in.
   - Characters: "Show both names" (first name and surname) in the Owned columns.
   - Window: the modern or the classic style (after a reload), and the columns' order.
@@ -32,6 +32,7 @@ if not CreateFrame then return end
 local ROW = 28
 local LABEL_W = 110
 local BUTTON_W = 116
+local PIN_SIZES = { 0.5, 2, 0.05 } -- the world map markers' size: least, most, step
 
 function ns.BuildOptions(parent, width)
   -- The page is taller than the window: what's on it scrolls (f), inside the panel.
@@ -60,16 +61,15 @@ function ns.BuildOptions(parent, width)
 
   --- A row of boxes, one per choice, for a saved setting; the chosen one is filled in
   --- the accent colour (classic: pressed in). `choices` are { value, text },
-  --- text a string or a function giving one. Each box `buttonW` wide (default BUTTON_W).
-  local function choice(label, top, key, choices, buttonW)
-    buttonW = buttonW or BUTTON_W
+  --- text a string or a function giving one.
+  local function choice(label, top, key, choices)
     local text = f:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
     text:SetPoint("TOPLEFT", 10, top - 4)
     text:SetText(label)
     local buttons = {}
     for i, c in ipairs(choices) do
-      local b = ns.Skin.Choice(f, buttonW, 22)
-      b:SetPoint("TOPLEFT", 10 + LABEL_W + (i - 1) * (buttonW + 4), top)
+      local b = ns.Skin.Choice(f, BUTTON_W, 22)
+      b:SetPoint("TOPLEFT", 10 + LABEL_W + (i - 1) * (BUTTON_W + 4), top)
       b:SetScript("OnClick", function()
         ns.db[key] = c[1]
         panel:Refresh()
@@ -129,6 +129,59 @@ function ns.BuildOptions(parent, width)
     controls[#controls + 1] = { Refresh = function() box:SetChecked(ns.db[key] ~= false) end }
   end
 
+  --- The world map markers' size: a slider, the size it's at, and to the right a marker
+  --- drawn at that size, as on the map zoomed out. The map follows as the slider moves.
+  local function sizeSlider(top)
+    local text = f:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+    text:SetPoint("TOPLEFT", 10, top - 4)
+    text:SetText("Marker size")
+    local slider = ns.Skin.Slider(f, 2 * BUTTON_W + 4, PIN_SIZES[1], PIN_SIZES[2], PIN_SIZES[3])
+    slider:SetPoint("TOPLEFT", 10 + LABEL_W, top - 1)
+    local value = f:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+    value:SetPoint("LEFT", slider, "RIGHT", 12, 0)
+
+    -- The preview: a marker on a dark square, big enough for the largest size.
+    local box = CreateFrame("Frame", nil, f)
+    local side = math.ceil(ns.MARKER_SIZE or 22) * PIN_SIZES[2] + 16
+    box:SetSize(side, side)
+    box:SetPoint("TOPRIGHT", f, "TOPRIGHT", -14, top + 24)
+    ns.Skin.Fill(box, { 0, 0, 0, 0.45 }):SetAllPoints()
+    ns.Skin.Border(box, ns.Skin.color.line)
+    local marker
+    if ns.MarkerArt then
+      marker = CreateFrame("Frame", nil, box)
+      marker:SetPoint("CENTER")
+      ns.MarkerArt(marker)
+    end
+    local caption = f:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+    caption:SetPoint("TOP", box, "BOTTOM", 0, -3)
+    caption:SetText("Preview")
+
+    local function show(size)
+      value:SetText(("%d%%"):format(math.floor(size * 100 + 0.5)))
+      if marker then
+        local px = (ns.MARKER_SIZE or 22) * size
+        marker:SetSize(px, px)
+      end
+    end
+    slider:SetScript("OnValueChanged", function(_, v)
+      -- To the step, as a whole number of steps over their count per 1 (0.75, not 0.7500001).
+      local per = math.floor(1 / PIN_SIZES[3] + 0.5)
+      v = math.floor(v * per + 0.5) / per
+      show(v)
+      if math.abs(v - (ns.db.pinScale or 1)) < 0.001 then return end
+      ns.db.pinScale = v
+      ns.Changed()
+    end)
+    controls[#controls + 1] = {
+      Refresh = function()
+        local size = ns.db.pinScale or 1
+        slider:SetValue(size)
+        show(size)
+      end,
+    }
+  end
+
   local top = -4
   heading("Craftsman's Writs", top)
   choice("Scale", top - 28, "repScale", scales("rep"))
@@ -178,8 +231,7 @@ function ns.BuildOptions(parent, width)
 
   top = top - 28 - ROW - 46
   heading("World map", top)
-  choice("Marker size", top - 28, "pinScale",
-    { { 0.5, "50%" }, { 0.75, "75%" }, { 1, "100%" }, { 1.25, "125%" }, { 1.5, "150%" } }, 88)
+  sizeSlider(top - 28)
   -- Below: whether the markers show at all, and whether they grow as the map zooms in.
   checkbox(top - 28 - ROW, "pins", "Show turn-in markers", function()
     GameTooltip:SetText("Turn-in markers", 1, 0.82, 0)

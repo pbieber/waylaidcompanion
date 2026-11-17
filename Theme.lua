@@ -9,6 +9,7 @@ The look every window shares, in one of two styles (Options, "Style"):
   ns.Skin.Cross   - a small button with a cross (close, remove)
   ns.Skin.Tab     - a boxed tab, brighter and underlined when it is the active one
   ns.Skin.Choice  - one of a row of choices, filled in the accent when it is the chosen one
+  ns.Skin.Slider  - a horizontal slider; modern: filled in the accent up to its thumb
   ns.Skin.Fill    - a flat colour texture
   ns.Skin.Border  - a one-pixel border around a frame or a texture
   ns.Skin.Round   - rounded corners for a bar
@@ -217,6 +218,42 @@ function Skin.Choice(parent, width, height)
   end
   b:SetActive(false)
   return b
+end
+
+--- A horizontal slider `width` wide from `low` to `high` in steps of `step`; set its
+--- OnValueChanged as on any slider. Modern: a thin track filled in the accent up to a flat
+--- thumb. Classic: a dark track with the game's slider thumb.
+function Skin.Slider(parent, width, low, high, step)
+  local s = CreateFrame("Slider", nil, parent)
+  s:SetOrientation("HORIZONTAL")
+  s:SetSize(width, 20)
+  s:SetMinMaxValues(low, high)
+  s:SetValueStep(step)
+  if s.SetObeyStepOnDrag then s:SetObeyStepOnDrag(true) end
+  s:SetHitRectInsets(0, 0, -4, -4)
+  local track
+  if Skin.Classic() then
+    track = Skin.Fill(s, { 0, 0, 0, 0.6 })
+    track:SetHeight(6)
+    Skin.Border(s, { 0.45, 0.45, 0.45, 1 }, "BORDER", track)
+    s:SetThumbTexture("Interface/Buttons/UI-SliderBar-Button-Horizontal")
+    local thumb = s:GetThumbTexture()
+    if thumb then thumb:SetSize(32, 32) end
+  else
+    track = Skin.Fill(s, C.choice)
+    track:SetHeight(4)
+    Skin.Border(s, C.choiceEdge, "BORDER", track)
+    local thumb = Skin.Fill(s, C.accent, "OVERLAY")
+    thumb:SetSize(8, 16)
+    s:SetThumbTexture(thumb)
+    local fill = Skin.Fill(s, { C.accent[1], C.accent[2], C.accent[3], 0.6 }, "ARTWORK")
+    fill:SetPoint("TOPLEFT", track, "TOPLEFT")
+    fill:SetPoint("BOTTOMLEFT", track, "BOTTOMLEFT")
+    fill:SetPoint("RIGHT", thumb, "CENTER")
+  end
+  track:SetPoint("LEFT", 0, 0)
+  track:SetPoint("RIGHT", 0, 0)
+  return s
 end
 
 --- A small square button with a cross, for closing or removing: `size` square, the
