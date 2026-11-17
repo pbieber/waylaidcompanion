@@ -1,17 +1,23 @@
 --[[
 Scanning the auction house for the prices a page uses: from the writs page each writ and
-what it asks for, from the crates page each crate and what fills it (/pwc scan: both). One
-search per item, by name, the way Auctionator searches;
-the lowest price listed for that exact item is kept in the saved settings
-(ns.ScannedPrices), with the time, and Core.lua weighs it against Auctionator's own price
-by which is newer.
+what it asks for, from the crates page each crate and what fills it (/pwc scan: both).
+The lowest price listed for each item is kept in the saved settings (ns.ScannedPrices),
+with the time, and Core.lua weighs it against Auctionator's own price by which is newer.
 
 Two auction houses, two ways to ask:
 
   - the modern one (C_AuctionHouse, which WoW Forever has): a browse search, whose
-    results carry each item's lowest price (minPrice) already;
-  - the old one (QueryAuctionItems), for clients that still have it: an exact-name
-    search sorted by price per item, reading buyouts page by page.
+    results carry each item's lowest price (minPrice) already, one row per item. A search
+    finds every item with the text in its name, so one word can price several items at
+    once: "Leather" finds Light, Medium, Heavy, Thick and Rugged Leather. Each search
+    takes the word of the next item's name that starts a word in the most other items
+    still to scan; an item no word shares with another is searched by its whole name.
+    Items a shared search lists none of are not listed: priced 0. When a word finds too
+    much to read through, what it didn't reach is searched by name instead, and the word
+    isn't shared again this session;
+  - the old one (QueryAuctionItems), for clients that still have it: one exact-name
+    search per item, sorted by price per item, reading buyouts page by page. Its results
+    are one row per auction, so sharing a word would only mean more pages.
 
 The auction house has to be open. Closing it stops the scan; what was found so far stays.
 ]]
@@ -21,6 +27,8 @@ if not CreateFrame then return end
 
 local PAGE_SIZE = 50  -- results the old auction house sends per page
 local MAX_PAGES = 3   -- pages (or batches of browse results) read per item at most
+local GROUP_PAGES = 5 -- batches of browse results read at most for a word several items share
+local MIN_WORD = 4    -- letters a shared search word has at least
 local SETTLE = 0.3    -- old auction house: seconds to wait after the last list update
 local TIMEOUT = 8     -- seconds to wait for an answer before moving on
 local NAME_WAIT = 3   -- seconds to wait for the game to load an item's name
@@ -40,6 +48,8 @@ local listeners = {}
 local itemKeys = {}
 -- When (GetTime()) a scan, or a purchase's search, last noted each item's price.
 local priced = {}
+-- Words (lower case) a shared search ran out of batches on this session: too broad to share.
+local tooBroad = {}
 
 --- The auction house's key for an item, as the last search saw it; nil if unseen, or if
 --- seen more than maxAge seconds ago (when given).
@@ -55,6 +65,23 @@ local function noteKey(id, key)
 end
 
 local GetItemInfo = (C_Item and C_Item.GetItemInfo) or GetItemInfo
+
+--- An item's name as the game has it, else as the data does; nil if neither has one yet.
+local function nameOf(item)
+  return (GetItemInfo and GetItemInfo(item.id)) or item.name
+end
+
+--- Whether a word in `name` starts with `text` (both lower case): what a search for `text`
+--- finds however the auction house matches inside words.
+local function startsWord(name, text)
+  local at = 1
+  while true do
+    local s = name:find(text, at, true)
+    if not s then return false end
+    if s == 1 or not name:sub(s - 1, s - 1):match("[%a']") then return true end
+    at = s + 1
+  end
+end
 
 --- Call fn whenever the scan's progress changes.
 function ns.OnScan(fn)
@@ -149,8 +176,7 @@ end
 
 --- Whether the scan running has yet to settle an item: it is on its list and not done.
 function ns.ScanPending(id)
-  local pos = scan and scan.pos[id]
-  return pos ~= nil and pos >= scan.index
+  return scan ~= nil and scan.pos[id] ~= nil and not scan.settled[id]
 end
 
 --- When (GetTime()) a scan or a purchase's search last noted an item's price; nil if not
@@ -162,10 +188,18 @@ end
 --- { running, scope, done, total, item (name being searched), found, last } for the bar.
 function ns.ScanProgress()
   if not scan then return { running = false, last = last } end
-  local item = scan.items[scan.index]
+  local query, item = scan.query, scan.items[scan.index]
+  local text
+  if query and #query.ids > 1 then
+    text = ('"%s": %d items'):format(query.text, #query.ids)
+  elseif query then
+    text = query.text
+  else
+    text = item and nameOf(item)
+  end
   return {
-    running = true, scope = scan.scope, done = scan.index - 1, total = #scan.items, found = scan.found,
-    item = item and ((GetItemInfo and GetItemInfo(item.id)) or item.name),
+    running = true, scope = scan.scope, done = scan.done, total = #scan.items, found = scan.found,
+    item = text,
   }
 end
 
@@ -177,43 +211,105 @@ local function finish(stopped)
     if scan.scope ~= "crates" then times.writs = now end
     if scan.scope ~= "writs" then times.crates = now end
   end
-  last = { found = scan.found, total = #scan.items, done = scan.index - 1, stopped = stopped }
-  print(("%s: scan %s. %d of %d listed."):format(ns.TITLE,
-    stopped and "stopped" or "done", scan.found, scan.index - 1))
+  last = { found = scan.found, total = #scan.items, done = scan.done, stopped = stopped }
+  print(("%s: scan %s. %d of %d listed, %d searches."):format(ns.TITLE,
+    stopped and "stopped" or "done", scan.found, scan.done, scan.searches))
   scan = nil
   notify()
   ns.Changed()
 end
 
---- Move on to the next item; with keep, note what was found for this one first (0 when
---- nothing was listed). Without it the item keeps whatever price it had.
-local function advance(keep)
-  local item = scan.items[scan.index]
+--- Done with an item; with keep, note what the scan found for it first (0 when nothing
+--- was listed). Without it the item keeps whatever price it had.
+local function settle(id, keep)
+  if scan.settled[id] then return end
+  scan.settled[id] = true
+  scan.done = scan.done + 1
   local prices = ns.ScannedPrices()
-  if keep and prices and item then
-    prices[item.id] = { scan.best or 0, time and time() or os.time() }
-    priced[item.id] = GetTime and GetTime() or 0
-    if scan.best then scan.found = scan.found + 1 end
+  if keep and prices then
+    local best = scan.best[id]
+    prices[id] = { best or 0, time and time() or os.time() }
+    priced[id] = GetTime and GetTime() or 0
+    if best then scan.found = scan.found + 1 end
   end
-  scan.index, scan.page, scan.best, scan.state, scan.waited = scan.index + 1, 0, nil, "send", 0
+end
+
+--- On to the next search, from the first item not yet settled; or the end.
+local function nextSearch()
+  scan.query, scan.page, scan.state, scan.waited = nil, 0, "send", 0
+  while scan.items[scan.index] and scan.settled[scan.items[scan.index].id] do
+    scan.index = scan.index + 1
+  end
   if scan.index > #scan.items then return finish(false) end
   notify()
 end
 
---- Read on (the next page or batch), or settle the item once a price turned up, the
---- results ran out, or enough was read.
+--- Settle every item the search running is for, and move on.
+local function advance(keep)
+  for _, id in ipairs(scan.query and scan.query.ids or {}) do settle(id, keep) end
+  nextSearch()
+end
+
+--- Read on (the next page or batch), or settle the search's items once each has a price,
+--- the results ran out, or enough was read.
 local function readOn(complete)
-  if scan.best or complete or scan.page + 1 >= MAX_PAGES then
-    advance(true)
-  else
+  local query, missing = scan.query, {}
+  for _, id in ipairs(query.ids) do
+    if not scan.best[id] then missing[#missing + 1] = id end
+  end
+  if #missing == 0 or complete then return advance(true) end
+  if scan.page + 1 < query.pages then
     scan.page, scan.state, scan.waited = scan.page + 1, "send", 0
+    return
+  end
+  if #query.ids == 1 then return advance(true) end
+  -- The word finds too much: keep what turned up, search the rest by name.
+  tooBroad[query.text:lower()] = true
+  for _, id in ipairs(missing) do scan.solo[id] = true end
+  for _, id in ipairs(query.ids) do
+    if scan.best[id] then settle(id, true) end
+  end
+  nextSearch()
+end
+
+local function keep(id, price)
+  if type(price) == "number" and price > 0 and (not scan.best[id] or price < scan.best[id]) then
+    scan.best[id] = price
   end
 end
 
-local function keep(price)
-  if type(price) == "number" and price > 0 and (not scan.best or price < scan.best) then
-    scan.best = price
+--- The next search: { text, ids, want (set of ids), pages }. For the first item not yet
+--- settled; with the modern auction house, by the word of its name that starts a word in
+--- the most other items still to scan (the longest of equals), when one does. nil while
+--- that item's name hasn't loaded.
+local function nextQuery()
+  local item = scan.items[scan.index]
+  local name = nameOf(item)
+  if not name then return nil end
+  local query = { text = name, ids = { item.id }, pages = MAX_PAGES }
+  if MODERN and not scan.solo[item.id] then
+    local others = {}
+    for i = scan.index + 1, #scan.items do
+      local other = scan.items[i]
+      local otherName = not scan.settled[other.id] and not scan.solo[other.id] and nameOf(other)
+      if otherName then others[#others + 1] = { id = other.id, name = otherName:lower() } end
+    end
+    for word in name:gmatch("[%a']+") do
+      local text = word:lower()
+      if #text >= MIN_WORD and not tooBroad[text] then
+        local ids = { item.id }
+        for _, other in ipairs(others) do
+          if startsWord(other.name, text) then ids[#ids + 1] = other.id end
+        end
+        if #ids > #query.ids or (#ids > 1 and #ids == #query.ids and #word > #query.text) then
+          query = { text = word, ids = ids, pages = GROUP_PAGES }
+        end
+      end
+    end
   end
+  query.want = {}
+  for _, id in ipairs(query.ids) do query.want[id] = true end
+  return query
 end
 
 -- ---------------------------------------------------------------------------
@@ -233,12 +329,13 @@ end
 --- Browse results: { itemKey = { itemID, ... }, minPrice, totalQuantity, ... }. minPrice
 --- is the lowest price per item listed.
 local function modernRead(results)
-  local item = scan.items[scan.index]
+  local want = scan.query.want
   for _, result in ipairs(results or {}) do
     local key = result.itemKey
-    if key and key.itemID == item.id then
-      keep(result.minPrice)
-      noteKey(item.id, key)
+    local id = key and key.itemID
+    if id and want[id] then
+      keep(id, result.minPrice)
+      noteKey(id, key)
     end
   end
   readOn(not AH.HasFullBrowseResults or AH.HasFullBrowseResults())
@@ -257,12 +354,12 @@ local function legacySend(name)
 end
 
 local function legacyRead()
-  local item = scan.items[scan.index]
+  local want = scan.query.want
   local count = GetNumAuctionItems("list") or 0
   for i = 1, count do
     local info = { GetAuctionItemInfo("list", i) }
     local stack, buyout, id = info[3], info[10], info[17]
-    if id == item.id and type(buyout) == "number" and (stack or 0) > 0 then keep(buyout / stack) end
+    if id and want[id] and type(buyout) == "number" and (stack or 0) > 0 then keep(id, buyout / stack) end
   end
   readOn(count < PAGE_SIZE)
 end
@@ -280,14 +377,20 @@ end
 -- ---------------------------------------------------------------------------
 
 local function send()
-  local item = scan.items[scan.index]
-  local name = (GetItemInfo and GetItemInfo(item.id)) or item.name
-  if not name then
-    -- The game has not loaded this item yet: give it a moment, then skip it.
-    if scan.waited > NAME_WAIT then advance(false) end
-    return
+  if not scan.query then
+    scan.query = nextQuery()
+    if not scan.query then
+      -- The game has not loaded this item yet: give it a moment, then skip it.
+      if scan.waited > NAME_WAIT then
+        settle(scan.items[scan.index].id, false)
+        nextSearch()
+      end
+      return
+    end
+    scan.searches = scan.searches + 1
+    notify()
   end
-  if MODERN then modernSend(name) else legacySend(name) end
+  if MODERN then modernSend(scan.query.text) else legacySend(scan.query.text) end
 end
 
 local driver = CreateFrame("Frame")
@@ -346,7 +449,10 @@ function ns.StartScan(scope)
   if not ns.CanScan() then return false, "No AH search on this client." end
   if not ahOpen then return false, "Open the AH." end
   if ns.Buying and ns.Buying() then return false, "Finish buying." end
-  scan = { scope = scope, items = itemsToScan(scope), pos = {}, index = 1, page = 0, found = 0, state = "send", waited = 0 }
+  scan = {
+    scope = scope, items = itemsToScan(scope), pos = {}, settled = {}, solo = {}, best = {},
+    index = 1, done = 0, found = 0, searches = 0, page = 0, state = "send", waited = 0,
+  }
   for i, item in ipairs(scan.items) do scan.pos[item.id] = i end
   driver:Show()
   notify()
