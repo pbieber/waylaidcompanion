@@ -7,7 +7,7 @@ The Options page: how the writs and crates pages show cost, and how characters a
     the quest reward silver comes off the cost.
   Per rep or favor, or in all: the Cost button at the foot of the writs and crates pages.
   - Items: names coloured by writ or crate tier, or by the item's rarity as in game.
-  - World map: the turn-in markers' size (a slider, 50 to 200%, with a marker drawn at
+  - World map: the turn-in markers' size (a slider, 25 to 200%, with a marker drawn at
     that size beside it; on OpenMap's map times its Icon size), whether they show (the same setting as the minimap button's right-click), and
     whether they grow as the map zooms in.
   - Characters: "Show both names" (first name and surname) in the Owned columns.
@@ -32,7 +32,7 @@ if not CreateFrame then return end
 local ROW = 28
 local LABEL_W = 110
 local BUTTON_W = 116
-local PIN_SIZES = { 0.5, 2, 0.05 } -- the world map markers' size: least, most, step
+local PIN_SIZES = { 0.25, 2, 0.05 } -- the world map markers' size: least, most, step
 
 function ns.BuildOptions(parent, width)
   -- The page is taller than the window: what's on it scrolls (f), inside the panel.
@@ -169,13 +169,13 @@ function ns.BuildOptions(parent, width)
       local per = math.floor(1 / PIN_SIZES[3] + 0.5)
       v = math.floor(v * per + 0.5) / per
       show(v)
-      if math.abs(v - (ns.db.pinScale or 1)) < 0.001 then return end
-      ns.db.pinScale = v
+      if math.abs(v - (ns.db.pinSize or 1)) < 0.001 then return end
+      ns.db.pinSize = v
       ns.Changed()
     end)
     controls[#controls + 1] = {
       Refresh = function()
-        local size = ns.db.pinScale or 1
+        local size = ns.db.pinSize or 1
         slider:SetValue(size)
         show(size)
       end,

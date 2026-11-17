@@ -26,7 +26,7 @@ with its zoom, and follow its own Icon size (OpenMapDB.worldmap.iconScale: read,
 local _, ns = ...
 if not CreateFrame or not WorldMapFrame then return end
 
-local SIZE = 22
+local SIZE = 22 * 0.65 -- a marker at the normal size (Options: Marker size 100%)
 local ZOOM_GROW = 0.5 -- how much bigger markers get at the map's closest zoom (Options: grow)
 local CONTINENT = 2 -- Enum.UIMapType.Continent
 
@@ -215,7 +215,7 @@ local function refresh()
     -- options ask for (times OpenMap's Icon size on its map), grown for the zoom.
     local zoom = parent:GetScale()
     if not zoom or zoom <= 0 then zoom = 1 end
-    local size = (ns.db.pinScale or 1) * zoomGrowth(api)
+    local size = (ns.db.pinSize or 1) * zoomGrowth(api)
     if api then size = size * (openMapSetting("iconScale") or 1) end
     local scale = size / zoom
     local width, height = parent:GetWidth(), parent:GetHeight()

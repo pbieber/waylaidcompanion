@@ -738,9 +738,9 @@ end
 -- writ and crate names by tier, "rarity" in the game's colour for the item. theme: "modern"
 -- draws the windows flat and dark, "classic" with the game's own frames (Theme.lua).
 -- pins: the world map's turn-in markers are shown (also the minimap button's right-click);
--- pinScale their size; pinZoom: they grow as the map zooms in (Map.lua).
+-- pinSize their size, 1 the normal; pinZoom: they grow as the map zooms in (Map.lua).
 local DEFAULTS = { page = "overview", writSort = "level", crateSort = "level", turninSort = "name", pins = true, ownerNames = 1,
-  pinScale = 1, pinZoom = true,
+  pinSize = 1, pinZoom = true,
   writCost = "per", crateCost = "per", repScale = 100, favorScale = 1, crateRefund = true, writPouch = true,
   itemColor = "tier",
   theme = "modern", mailWhat = "writs" }
@@ -786,6 +786,12 @@ events:SetScript("OnEvent", function(_, event, arg1)
     if arg1 ~= ADDON then return end
     PuggerWaylaidCompanionDB = PuggerWaylaidCompanionDB or {}
     local db = PuggerWaylaidCompanionDB
+    -- Map markers sized pinScale (0.9.0 before release) were half again as big at 1: the
+    -- same size on the map in pinSize, whose normal (1) is the old 65%.
+    if db.pinScale and not db.pinSize then
+      db.pinSize = math.max(0.25, math.min(2, math.floor(db.pinScale / 0.65 * 20 + 0.5) / 20))
+    end
+    db.pinScale = nil
     for key, value in pairs(DEFAULTS) do
       if db[key] == nil then db[key] = value end
     end
