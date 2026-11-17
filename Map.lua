@@ -17,6 +17,10 @@ through the map's own pin pools (which want XML templates and are easy to taint)
 zone's own map a marker sits at its zone coordinates; on a continent map those are
 converted through world coordinates. Options: the markers' size, whether they grow as the
 map zooms in, and whether they show at all (also the minimap button's right-click).
+
+With OpenMap (an addon: one seamless map of the world) showing its stitched map, markers are
+placed through its API (OpenMapAPI) all over it, not only on the zone underneath; they grow
+with its zoom, and follow its own Icon size (OpenMapDB.worldmap.iconScale: read, never set).
 ]]
 
 local _, ns = ...
@@ -61,6 +65,55 @@ local function place(map, x, y, shown)
   local px, py = pos:GetXY()
   if not px or px < 0 or px > 1 or py < 0 or py > 1 then return nil end
   return px, py
+end
+
+-- ---------------------------------------------------------------------------
+-- OpenMap
+-- ---------------------------------------------------------------------------
+
+local OPENMAP_ZOOM = 48 -- OpenMap's deepest zoom (x the whole world) when its setting can't be read
+
+--- OpenMap's API while its stitched map is up; nil otherwise.
+local function openMap()
+  local api = OpenMapAPI
+  if type(api) ~= "table" or type(api.IsStitched) ~= "function" then return nil end
+  local ok, stitched = pcall(api.IsStitched)
+  return ok and stitched and api or nil
+end
+
+--- One of OpenMap's world map settings, if it's a number.
+local function openMapSetting(key)
+  local db = type(OpenMapDB) == "table" and OpenMapDB.worldmap
+  return type(db) == "table" and tonumber(db[key]) or nil
+end
+
+--- Where a zone position (0-100) falls on the stitched map's canvas: 0-1 over the map
+--- underneath (`shown`), and past it where the view reaches beyond it.
+local function placeStitched(api, map, x, y, shown)
+  local ok, u, v = pcall(api.WorldFromMap, map, x / 100, y / 100)
+  if not ok or not u then return nil end
+  local ok2, cx, cy = pcall(api.MapFromWorld, shown, u, v)
+  if not ok2 or not cx then return nil end
+  return cx, cy
+end
+
+--- How much bigger than their set size the markers are at this zoom: 1 zoomed out, up to
+--- 1 + ZOOM_GROW zoomed all the way in (Options: grow). On OpenMap's map by its zoom, from
+--- the whole world to its deepest; on Blizzard's, by the map's own zoom.
+local function zoomGrowth(api)
+  if ns.db.pinZoom == false then return 1 end
+  local percent
+  if api then
+    local ok, _, _, zoom = pcall(api.GetView)
+    local most = openMapSetting("maxZoom") or OPENMAP_ZOOM
+    if ok and type(zoom) == "number" and zoom > 1 and most > 1 then
+      percent = math.log(zoom) / math.log(most)
+    end
+  elseif WorldMapFrame.GetCanvasZoomPercent then
+    local ok, p = pcall(WorldMapFrame.GetCanvasZoomPercent, WorldMapFrame)
+    if ok and type(p) == "number" then percent = p end
+  end
+  return 1 + ZOOM_GROW * math.max(0, math.min(1, percent or 0))
 end
 
 local function showTooltip(pin)
@@ -147,22 +200,28 @@ local function refresh()
     if camp then
       stops[#stops + 1] = { npc = camp, camp = true, writs = {}, open = 1, held = 0 }
     end
+    local api = openMap()
     -- The canvas grows as the map zooms in; shrink the markers back to the size the
-    -- options ask for, and with "grow" let them get up to ZOOM_GROW bigger at full zoom.
+    -- options ask for (times OpenMap's Icon size on its map), grown for the zoom.
     local zoom = parent:GetScale()
     if not zoom or zoom <= 0 then zoom = 1 end
-    local size = ns.db.pinScale or 1
-    if ns.db.pinZoom ~= false and WorldMapFrame.GetCanvasZoomPercent then
-      local ok, percent = pcall(WorldMapFrame.GetCanvasZoomPercent, WorldMapFrame)
-      if ok and type(percent) == "number" then
-        size = size * (1 + ZOOM_GROW * math.max(0, math.min(1, percent)))
-      end
-    end
+    local size = (ns.db.pinScale or 1) * zoomGrowth(api)
+    if api then size = size * (openMapSetting("iconScale") or 1) end
     local scale = size / zoom
     local width, height = parent:GetWidth(), parent:GetHeight()
+    -- Above the map's own pins, and on OpenMap's map above its art, in whatever strata
+    -- the map is in.
+    local level = parent:GetFrameLevel() + 3000
+    if api and api.ArtTopLevel then
+      local ok, top = pcall(api.ArtTopLevel)
+      if ok and type(top) == "number" then level = math.max(level, top + 10) end
+    end
+    level = math.min(9000, level)
 
     for _, stop in ipairs(stops) do
-      local x, y = place(stop.npc.map, stop.npc.x, stop.npc.y, shown)
+      local x, y
+      if api then x, y = placeStitched(api, stop.npc.map, stop.npc.x, stop.npc.y, shown) end
+      if not x then x, y = place(stop.npc.map, stop.npc.x, stop.npc.y, shown) end
       if x then
         used = used + 1
         local pin = pins[used]
@@ -171,8 +230,7 @@ local function refresh()
           pins[used] = pin
         end
         pin.stop = stop
-        -- Above the map's own pins, in whatever strata the map is in.
-        pin:SetFrameLevel(math.min(9000, parent:GetFrameLevel() + 3000))
+        pin:SetFrameLevel(level)
         -- Offsets count in the marker's own scale.
         pin:SetScale(scale)
         pin:ClearAllPoints()
@@ -193,6 +251,11 @@ WorldMapFrame:HookScript("OnShow", refresh)
 if WorldMapFrame.OnMapChanged then hooksecurefunc(WorldMapFrame, "OnMapChanged", refresh) end
 if WorldMapFrame.OnCanvasScaleChanged then hooksecurefunc(WorldMapFrame, "OnCanvasScaleChanged", refresh) end
 ns.OnChange(refresh)
+-- OpenMap: its view moving (a pan can bring other zones in), and its map switching on or off.
+if type(OpenMapAPI) == "table" and type(OpenMapAPI.RegisterCallback) == "function" then
+  pcall(OpenMapAPI.RegisterCallback, "PuggerWaylaidCompanion", "OpenMap_ViewChanged", refresh)
+  pcall(OpenMapAPI.RegisterCallback, "PuggerWaylaidCompanion", "OpenMap_StitchedChanged", refresh)
+end
 
 -- ---------------------------------------------------------------------------
 -- A writ's tooltip: tier, reputation, profession, where it is handed in

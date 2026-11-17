@@ -7,8 +7,9 @@ The Options page: how the writs and crates pages show cost, and how characters a
     the quest reward silver comes off the cost.
   Per rep or favor, or in all: the Cost button at the foot of the writs and crates pages.
   - Items: names coloured by writ or crate tier, or by the item's rarity as in game.
-  - World map: the turn-in markers' size, whether they show (the same setting as the
-    minimap button's right-click), and whether they grow as the map zooms in.
+  - World map: the turn-in markers' size (50 to 150%; on OpenMap's map times its Icon
+    size), whether they show (the same setting as the minimap button's right-click), and
+    whether they grow as the map zooms in.
   - Characters: "Show both names" (first name and surname) in the Owned columns.
   - Window: the modern or the classic style (after a reload), and the columns' order.
 
@@ -59,15 +60,16 @@ function ns.BuildOptions(parent, width)
 
   --- A row of boxes, one per choice, for a saved setting; the chosen one is filled in
   --- the accent colour (classic: pressed in). `choices` are { value, text },
-  --- text a string or a function giving one.
-  local function choice(label, top, key, choices)
+  --- text a string or a function giving one. Each box `buttonW` wide (default BUTTON_W).
+  local function choice(label, top, key, choices, buttonW)
+    buttonW = buttonW or BUTTON_W
     local text = f:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
     text:SetPoint("TOPLEFT", 10, top - 4)
     text:SetText(label)
     local buttons = {}
     for i, c in ipairs(choices) do
-      local b = ns.Skin.Choice(f, BUTTON_W, 22)
-      b:SetPoint("TOPLEFT", 10 + LABEL_W + (i - 1) * (BUTTON_W + 4), top)
+      local b = ns.Skin.Choice(f, buttonW, 22)
+      b:SetPoint("TOPLEFT", 10 + LABEL_W + (i - 1) * (buttonW + 4), top)
       b:SetScript("OnClick", function()
         ns.db[key] = c[1]
         panel:Refresh()
@@ -177,7 +179,7 @@ function ns.BuildOptions(parent, width)
   top = top - 28 - ROW - 46
   heading("World map", top)
   choice("Marker size", top - 28, "pinScale",
-    { { 0.75, "75%" }, { 1, "100%" }, { 1.25, "125%" }, { 1.5, "150%" } })
+    { { 0.5, "50%" }, { 0.75, "75%" }, { 1, "100%" }, { 1.25, "125%" }, { 1.5, "150%" } }, 88)
   -- Below: whether the markers show at all, and whether they grow as the map zooms in.
   checkbox(top - 28 - ROW, "pins", "Show turn-in markers", function()
     GameTooltip:SetText("Turn-in markers", 1, 0.82, 0)
@@ -189,9 +191,12 @@ function ns.BuildOptions(parent, width)
     GameTooltip:SetText("Grow when zoomed in", 1, 0.82, 0)
     GameTooltip:AddLine(("Markers get bigger as you zoom in on the map, up to %d%% more at the "
       .. "closest zoom. Unticked: they stay one size."):format(50), 1, 1, 1, true)
+    GameTooltip:AddLine(" ")
+    GameTooltip:AddLine("With OpenMap: they grow from its whole-world view to its deepest zoom.",
+      0.8, 0.8, 0.8, true)
   end, 2 * (BUTTON_W + 4))
   note("The size of the markers for writ turn-ins and the crate camp on the world map, "
-    .. "zoomed out.", top - 28 - 2 * ROW)
+    .. "zoomed out. On OpenMap's map, also times its own Icon size.", top - 28 - 2 * ROW)
 
   top = top - 28 - 2 * ROW - 34
   heading("Characters", top)
