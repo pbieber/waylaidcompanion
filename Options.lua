@@ -229,11 +229,11 @@ function ns.BuildOptions(parent, width)
     end
     if starred then
       GameTooltip:AddLine(" ")
-      GameTooltip:AddLine("* Not confirmed yet: from one pouch so far.", 0.6, 0.6, 0.6, true)
+      GameTooltip:AddLine("* Only a small sample size.", 0.6, 0.6, 0.6, true)
     end
   end)
-  note("The reputation a cost per rep is for. Per rep or absolute: the Cost button at the bottom "
-    .. "right of the writs page. Ticked: less the coin pouch's average silver.", top - 28 - 2 * ROW)
+  note("Scale for the Cost per Reputation calculation. Switch at the bottom right of the Writs page.",
+    top - 28 - 2 * ROW)
 
   top = top - 28 - 2 * ROW - 34
   heading("Waylaid Crates", top)
@@ -244,9 +244,8 @@ function ns.BuildOptions(parent, width)
     GameTooltip:AddLine("Each crate turn-in also gives half its reputation as silver in quest "
       .. "rewards. Account for this silver in the cheapest per favor calculation.", 1, 1, 1, true)
   end)
-  note("The Merchant's Favor a cost per favor is for. Per favor or absolute: the Cost button at "
-    .. "the bottom right of the crates page. Ticked: less the quest reward silver.",
-    top - 28 - 2 * ROW)
+  note("Scale for the Cost per Merchant's Favor calculation. Switch at the bottom right of the "
+    .. "Waylaid Crates page.", top - 28 - 2 * ROW)
 
   top = top - 28 - 2 * ROW - 34
   heading("Items", top)
