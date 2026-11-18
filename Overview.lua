@@ -5,7 +5,8 @@ The window's first page:
   - Today: how many daily turn-ins are left today, and the reputation they are worth;
   - Cost: roughly what the next standing costs in writs at AH prices, and how many days
     it takes, handing in the cheapest COST_DAILY a day, or every writ there is a day
-    (ns.WritPlan);
+    (ns.WritPlan); and in Forged Delivery Receipts, bought with Merchant's Favor from
+    the crate that pays favor cheapest;
   - Turn-ins needed: how many writs of each tier that takes, and how many to Exalted.
 
 ns.BuildOverview makes the frame; UI.lua places it and calls its Refresh.
@@ -20,6 +21,25 @@ local ROW = 22
 local COLUMNS = { 10, 250, 440 }
 -- The writs a day of the Cost box's first plan.
 local COST_DAILY = 20
+-- A Forged Delivery Receipt (item 262902): bought for RECEIPT_FAVOR Merchant's Favor,
+-- handed in for RECEIPT_REP reputation.
+local RECEIPT_FAVOR, RECEIPT_REP = 15, 50
+
+--- The crate whose Merchant's Favor costs least, and its ns.CrateCost: crates with a
+--- whole price first, then those with a price for one part. nil when none has a price.
+local function cheapestCrate()
+  local best, bestCost, bestRank
+  for _, crate in ipairs(ns.crates) do
+    local cost = ns.CrateCost(crate)
+    if cost.perFavor then
+      local rank = cost.partial and 2 or 1
+      if not best or rank < bestRank or (rank == bestRank and cost.perFavor < bestCost.perFavor) then
+        best, bestCost, bestRank = crate, cost, rank
+      end
+    end
+  end
+  return best, bestCost
+end
 
 -- The reputation bar's colour for each standing, where the game does not supply them.
 local BAR_COLOR = {
@@ -139,16 +159,17 @@ function ns.BuildOverview(parent, width)
   f.today = makeGrid(f, top - 44, todayRows)
 
   top = top - 44 - todayRows * ROW - 26
-  card(top + 8, top - 18 - 3 * ROW - 24)
+  local costRows = 4
+  card(top + 8, top - 18 - costRows * ROW - 24)
   heading("Cost", top)
-  f.cost = makeGrid(f, top - 18, 3)
+  f.cost = makeGrid(f, top - 18, costRows)
   f.costNote = f:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
-  f.costNote:SetPoint("TOPLEFT", 10, top - 18 - 3 * ROW - 4)
+  f.costNote:SetPoint("TOPLEFT", 10, top - 18 - costRows * ROW - 4)
   f.costNote:SetPoint("RIGHT", -10, 0)
   f.costNote:SetJustifyH("LEFT")
   f.costNote:SetWordWrap(false)
 
-  top = top - 18 - 3 * ROW - 44
+  top = top - 18 - costRows * ROW - 44
   local neededRows = 1 + #ns.WRIT_TIERS
   card(top + 8, top - 18 - neededRows * ROW - 24)
   heading("Turn-ins needed", top)
@@ -168,6 +189,22 @@ function ns.BuildOverview(parent, width)
     local days = ("%d day%s"):format(plan.days, plan.days == 1 and "" or "s")
     return text, days .. ns.Color(GREY, ("  (%d writs)"):format(plan.writs))
   end
+
+  --- The Receipts row's cells for `goal` reputation: the receipts' favor at the cheapest
+  --- crate's cost per favor, and how many receipts, with that crate.
+  local function receiptCells(goal)
+    local receipts = math.ceil(goal / RECEIPT_REP)
+    local count = ("%s receipt%s"):format(number(receipts), receipts == 1 and "" or "s")
+    if not ns.HasPrices() then return ns.Color(GREY, "no prices"), count end
+    local crate, cost = cheapestCrate()
+    if not crate then return ns.Color(GREY, "no crate prices"), count end
+    local text = ns.SignedCoins(receipts * RECEIPT_FAVOR * cost.perFavor)
+    if cost.partial then text = text .. ns.Color("ffff8040", " + ?") end
+    if cost.old then text = text .. ns.Color("ffff8040", " *") end
+    return text, count .. "  " .. ns.Color(ns.CRATE_COLOR[crate.tier] or GREY, crate.name)
+  end
+  local RECEIPT_LABEL = "Forged Delivery Receipt"
+    .. ns.Color(GREY, ("  %d favor"):format(RECEIPT_FAVOR))
 
   function f:Refresh()
     local rep = ns.Reputation()
@@ -229,6 +266,7 @@ function ns.BuildOverview(parent, width)
       self.cost:Row(1, "Plan", "Cost", "Days")
       self.cost:Row(2, ("Cheapest %d a day"):format(COST_DAILY), ns.Color(GREY, rep and "Exalted" or ""), "")
       self.cost:Row(3, "Every writ a day", ns.Color(GREY, rep and "Exalted" or ""), "")
+      self.cost:Row(4, RECEIPT_LABEL, ns.Color(GREY, rep and "Exalted" or ""), "")
       self.costNote:SetText(rep and "" or "Faction unknown.")
     else
       local nextName = ns.StandingName(math.min(rep.standing + 1, 8))
@@ -240,6 +278,7 @@ function ns.BuildOverview(parent, width)
       cost, days = planCells(every)
       self.cost:Row(3, "Every writ a day" .. ns.Color(GREY, ("  %s rep"):format(number(every.daily))),
         cost, days)
+      self.cost:Row(4, RECEIPT_LABEL, receiptCells(rep.toNext))
       local note = ("%s rep, at AH prices"):format(number(rep.toNext))
       if ns.db.writPouch ~= false then note = note .. ", less coin pouch silver" end
       note = note .. ". Counting today's open writs. Cheapest per rep first."
