@@ -10,6 +10,8 @@ The Options page: how the writs and crates pages show cost, and how characters a
   - World map: the turn-in markers' size (a slider, 25 to 200%, with a marker drawn at
     that size beside it; on OpenMap's map times its Icon size), whether they show (the same setting as the minimap button's right-click), and
     whether they grow as the map zooms in.
+  - Tooltips: what is added to a writ's and a crate's tooltip (Tooltips.lua), each kind on
+    or off, and each line.
   - Characters: "Show both names" (first name and surname) in the Owned columns.
   - Window: the modern or the classic style (after a reload), and the columns' order.
 
@@ -127,6 +129,30 @@ function ns.BuildOptions(parent, width)
       ns.Changed()
     end)
     controls[#controls + 1] = { Refresh = function() box:SetChecked(ns.db[key] ~= false) end }
+  end
+
+  --- A plain box for a setting that is on unless set to false, `left` into the row. With
+  --- `master`, greyed out while that setting is off.
+  local function toggle(top, left, key, label, master)
+    local box = CreateFrame("CheckButton", nil, f, "UICheckButtonTemplate")
+    box:SetSize(24, 24)
+    box:SetPoint("TOPLEFT", 6 + LABEL_W + left, top + 2)
+    local text = box:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    text:SetPoint("LEFT", box, "RIGHT", 2, 0)
+    text:SetText(label)
+    box:SetScript("OnClick", function(self)
+      ns.db[key] = self:GetChecked() and true or false
+      panel:Refresh()  -- (the lines under a kind grey out now, not when the pages next refresh)
+      ns.Changed()
+    end)
+    controls[#controls + 1] = {
+      Refresh = function()
+        box:SetChecked(ns.db[key] ~= false)
+        local enabled = not master or ns.db[master] ~= false
+        box:SetEnabled(enabled)
+        if enabled then text:SetTextColor(1, 1, 1) else text:SetTextColor(0.5, 0.5, 0.5) end
+      end,
+    }
   end
 
   --- The world map markers' size: a slider, the size it's at, and to the right a marker
@@ -251,6 +277,34 @@ function ns.BuildOptions(parent, width)
     .. "zoomed out. On OpenMap's map, also times its own Icon size.", top - 28 - 2 * ROW)
 
   top = top - 28 - 2 * ROW - 34
+  heading("Tooltips", top)
+  -- Each kind: a box for all of it, then a box per line, greyed while the kind is off.
+  local LINE_IN, LINE_GAP = 22, 250
+  local function kind(top, label, key, lines)
+    local text = f:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+    text:SetPoint("TOPLEFT", 10, top - 4)
+    text:SetText(label)
+    toggle(top, 0, key, lines.all)
+    for i, line in ipairs(lines) do
+      local row, column = math.floor((i - 1) / 2), (i - 1) % 2
+      toggle(top - ROW * (row + 1), LINE_IN + column * LINE_GAP, line[1], line[2], key)
+    end
+    return top - ROW * (math.floor((#lines + 1) / 2) + 1)
+  end
+  top = kind(top - 28, "Writs", "ttWrit", {
+    all = "Add to writ tooltips",
+    { "ttWritTier", "Tier and reputation" }, { "ttWritProfession", "Profession and skill" },
+    { "ttWritMaterial", "Material and its cost" }, { "ttWritTurnIn", "Turn-in zone and NPC" },
+  })
+  top = kind(top - 6, "Crates", "ttCrate", {
+    all = "Add to crate tooltips",
+    { "ttCrateFavor", "Tier and favor" }, { "ttCrateMaterial", "Materials and their cost" },
+    { "ttCrateTurnIn", "Turn-in camp" },
+  })
+  note("What Pugger adds to a writ's or crate's tooltip, wherever the game shows it: bags, "
+    .. "auction house, mail, links in chat.", top - 2)
+
+  top = top - 2 - 34
   heading("Characters", top)
   local names = CreateFrame("CheckButton", nil, f, "UICheckButtonTemplate")
   names:SetSize(24, 24)

@@ -7,10 +7,7 @@ When what the bags lack (the writ, or for a writ in bags its material) is elsewh
 account (bank, mail, another character), the writ's and the material's counts follow
 underneath, by character, as on the writs page.
 
-A writ's own tooltip, wherever the game shows it (bags, auction house, mail, a link in
-chat), says what the WritTier addon did, its tier and the reputation it gives, then the
-profession and skill that make what it asks for, then where it is handed in: the zone,
-then the NPC and where in the zone.
+A writ's or crate's own tooltip: Tooltips.lua.
 
 The markers are plain frames on the map's canvas, placed by hand, so nothing here goes
 through the map's own pin pools (which want XML templates and are easy to taint). On a
@@ -265,90 +262,4 @@ ns.OnChange(refresh)
 if type(OpenMapAPI) == "table" and type(OpenMapAPI.RegisterCallback) == "function" then
   pcall(OpenMapAPI.RegisterCallback, "PuggerWaylaidCompanion", "OpenMap_ViewChanged", refresh)
   pcall(OpenMapAPI.RegisterCallback, "PuggerWaylaidCompanion", "OpenMap_StitchedChanged", refresh)
-end
-
--- ---------------------------------------------------------------------------
--- A writ's tooltip: tier, reputation, profession, where it is handed in
--- ---------------------------------------------------------------------------
-
-local writsOf  -- [writ item] = the writs the data lists for it (both sides at times)
-
---- The writ an item is, the one for this character's side first; nil if no writ.
-local function writFor(id)
-  if not writsOf then
-    writsOf = {}
-    for _, writ in ipairs(ns.writs) do
-      local list = writsOf[writ.writItem] or {}
-      list[#list + 1] = writ
-      writsOf[writ.writItem] = list
-    end
-  end
-  local list = writsOf[id]
-  if not list then return nil end
-  for _, writ in ipairs(list) do
-    if ns.ForPlayer(writ) then return writ end
-  end
-  return list[1]
-end
-
--- The tiers' colours, as the WritTier addon has them (the item quality colours).
-local TIER_RGB = { { 0.12, 1.00, 0.00 }, { 0.00, 0.44, 0.87 }, { 0.64, 0.21, 0.93 } }
-local GetItemInfo = (C_Item and C_Item.GetItemInfo) or GetItemInfo
-
---- Add a writ's lines to an item tooltip: "Expert writ" and "+125 reputation", "Made
---- with Alchemy 205", then where it is handed in. A writ the data doesn't list says its
---- tier is unknown. True when `id` is a writ.
-local function addTurnIn(tooltip, id)
-  local writ = id and writFor(id)
-  if not writ then
-    local name = id and GetItemInfo and GetItemInfo(id)
-    if type(name) ~= "string" or not name:find("^Craftsman's Writ: ") then return false end
-    tooltip:AddLine("Writ tier: unknown", 0.6, 0.6, 0.6)
-    return true
-  end
-  local r, g, b = unpack(TIER_RGB[writ.tier])
-  tooltip:AddDoubleLine(ns.WRIT_TIERS[writ.tier] .. " writ", ("+%d reputation"):format(ns.WRIT_REP[writ.tier]),
-    r, g, b, 1, 0.82, 0)
-  tooltip:AddLine(("Made with %s %d"):format(writ.profession, writ.skill), 0.8, 0.8, 0.8)
-  local npc = ns.WritNpc(writ)
-  if npc then
-    tooltip:AddLine("Turn in: " .. ns.Color("ffffffff", npc.zone), 1, 0.82, 0)
-    tooltip:AddLine(("%s (%.1f, %.1f)"):format(npc.name, npc.x, npc.y), 0.6, 0.6, 0.6)
-  else
-    tooltip:AddLine("Turn in: unknown. Saved when you accept the quest.", 0.6, 0.6, 0.6, true)
-  end
-  return true
-end
-
-local function itemID(link)
-  return type(link) == "string" and tonumber(link:match("item:(%d+)")) or nil
-end
-
-if TooltipDataProcessor and TooltipDataProcessor.AddTooltipPostCall and Enum and Enum.TooltipDataType then
-  TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Item, function(tooltip, data)
-    if tooltip and tooltip.AddLine and data then pcall(addTurnIn, tooltip, data.id) end
-  end)
-else
-  -- Older clients: when the tooltip is set to an item. That can come twice for one item,
-  -- so a tooltip takes the lines once until it is cleared.
-  local added = setmetatable({}, { __mode = "k" })
-  for _, tooltip in ipairs({ GameTooltip, ItemRefTooltip }) do
-    if tooltip and tooltip.HookScript and tooltip:HasScript("OnTooltipSetItem") then
-      -- Without word of the tooltip clearing, every time: twice beats never again.
-      local clears = tooltip:HasScript("OnTooltipCleared")
-      tooltip:HookScript("OnTooltipSetItem", function(self)
-        local _, link = self:GetItem()
-        local id = itemID(link)
-        if not id or (clears and added[self] == id) then return end
-        local ok, isWrit = pcall(addTurnIn, self, id)
-        if ok and isWrit then
-          added[self] = id
-          self:Show()  -- room for the lines
-        end
-      end)
-      if clears then
-        tooltip:HookScript("OnTooltipCleared", function(self) added[self] = nil end)
-      end
-    end
-  end
 end

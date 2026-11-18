@@ -26,4 +26,5 @@ Overview.lua
 Options.lua
 UI.lua
 Map.lua
+Tooltips.lua
 Minimap.lua
