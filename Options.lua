@@ -250,9 +250,8 @@ function ns.BuildOptions(parent, width)
   top = top - 28 - 2 * ROW - 34
   heading("Items", top)
   choice("Name color", top - 28, "itemColor", { { "tier", "Tier" }, { "rarity", "Rarity (in game)" } })
-  note("Tier: writs and crates in their tier's colour. Rarity: every item as the game colours it; "
-    .. "the Profession column keeps the tier's colour (by profession: the Tier column).",
-    top - 28 - ROW)
+  note("Tier: colors items in the list by the color of the writ's or crate's tier. Rarity: the "
+    .. "true color of the item in game.", top - 28 - ROW)
 
   top = top - 28 - ROW - 46
   heading("World map", top)
@@ -300,8 +299,7 @@ function ns.BuildOptions(parent, width)
     { "ttCrateFavor", "Tier and favor" }, { "ttCrateMaterial", "Materials and their cost" },
     { "ttCrateTurnIn", "Turn-in camp" },
   })
-  note("What Pugger adds to a writ's or crate's tooltip, wherever the game shows it: bags, "
-    .. "auction house, mail, links in chat.", top - 2)
+  note("Select what to show in the tooltips.", top - 2)
 
   top = top - 2 - 34
   heading("Characters", top)
@@ -315,10 +313,9 @@ function ns.BuildOptions(parent, width)
     ns.db.ownerNames = self:GetChecked() and 2 or 1
   end)
   controls[#controls + 1] = { Refresh = function() names:SetChecked(ns.db.ownerNames == 2) end }
-  note("The Owned columns name another character by first name, or ticked, by first name and "
-    .. "surname. Also /pwc names.", top - 28 - ROW)
+  note('Shows both names of a character in the "Owned" column and on hover.', top - 28 - ROW)
 
-  top = top - 28 - ROW - 46
+  top = top - 28 - ROW - 34
   heading("Window", top)
   choice("Style", top - 28, "theme", { { "modern", "Modern" }, { "classic", "Classic" } })
   -- A style is drawn when the windows are built, so a change waits for a reload.
