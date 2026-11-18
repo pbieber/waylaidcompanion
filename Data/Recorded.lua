@@ -22,6 +22,7 @@ ns.RECORDED_NPCS = {
   [11805] = { "Jarund Stoutstrider", 1451, 82.06, 18.07, "Silithus" },
   [12029] = { "Narianna", 1450, 53.36, 42.72, "Moonglade" },
   [13717] = { "Centaur Pariah", 1443, 50.5, 86.67, "Desolace" },
+  [14437] = { "Gorzeeki Wildeyes", 1428, 12.44, 31.65, "Burning Steppes" },
   [14624] = { "Master Smith Burninate", 1427, 38.82, 28.5, "Searing Gorge" },
   [14634] = { "Lookout Captain Lolo Longstriker", 1427, 37.75, 26.55, "Searing Gorge" },
   [14743] = { "Jhordy Lapforge", 1446, 52.29, 26.89, "Tanaris" },
@@ -111,6 +112,7 @@ ns.RECORDED_WRITS = {
   [94296] = 262143, -- Wild Leather Shoulders
   [94297] = 12029, -- Quickdraw Quiver
   [94298] = 262284, -- Swift Boots
+  [94299] = 14624, -- Nightscape Shoulders
   [94300] = 262306, -- Big Voodoo Mask
   [94301] = "at:1446:669:223", -- Big Voodoo Robe
   [94303] = 9272, -- Thick Leather Ammo Pouch
@@ -122,13 +124,14 @@ ns.RECORDED_WRITS = {
   [94312] = 262379, -- Orange Martial Shirt
   [94313] = 6568, -- White Bandit Mask
   [94317] = "at:1419:518:356", -- Dreamless Sleep Potion
-  [94318] = "at:1428:124:316", -- Greater Fire Protection Potion
+  [94318] = 14437, -- Greater Fire Protection Potion
   [94322] = 11805, -- Limited Invulnerability Potion
   [94323] = "at:1422:595:531", -- Major Rejuvenation Potion
   [94328] = "at:1430:483:687", -- Mithril Spurs
   [94340] = 15175, -- Truesilver Transformer
   [94341] = "at:1422:657:761", -- Sniper Scope
   [94350] = "at:1422:382:724", -- Runic Leather Bracers
+  [94354] = "at:1428:124:316", -- Runecloth Boots
   [94355] = "at:1430:469:753", -- Tuxedo Jacket
   [94358] = "at:1451:671:697", -- Shadoweave Mask
   [94360] = "at:1452:576:880", -- Soul Pouch
@@ -615,7 +618,7 @@ ns.RECORDED_REWARDS = {
       { id = 21219, name = "Recipe: Sagefish Delight", price = 5000, quantity = 1, costs = {} },
       { id = 4536, name = "Shiny Red Apple", price = 25, quantity = 5, costs = {} },
     } },
-    [248199] = { npc = "Beneris", time = 1794813878, items = {
+    [248199] = { npc = "Beneris", time = 1794847577, items = {
       { id = 249479, name = "Formula: Enchant Weapon - Insight", price = 0, quantity = 1, costs = { { value = 45, name = "Merchant's Favor", icon = 135725 } } },
       { id = 249483, name = "Formula: Soulstaff", price = 0, quantity = 1, costs = { { value = 45, name = "Merchant's Favor", icon = 135725 } } },
       { id = 249485, name = "Formula: Orb of Souls", price = 0, quantity = 1, costs = { { value = 45, name = "Merchant's Favor", icon = 135725 } } },
