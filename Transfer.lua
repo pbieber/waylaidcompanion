@@ -5,7 +5,8 @@ A "set" is one writ and the material it asks for (the writ's count).
 
   - Mail: one set of each writ in the bags to a character ("Name Surname": an alt, or a
     name typed in, which can be saved as a one-click target). Packed into mails of up to
-    12 attachments; each mail is sent with a click on Send.
+    12 attachments; each mail is sent with a click on Send. All writs, or only those
+    handed in in one zone (chosen on the page).
   - Bank: Bank to bags and Bags to bank, each with 1 of each (a writ of each kind and
     its material), Extra (all but one writ of each kind) and All writs.
   - Buying: the missing material for the writs in the bags (Buy.lua).
@@ -159,6 +160,23 @@ local function writKinds()
   end
   table.sort(out, function(a, b) return a.name < b.name end)
   return out
+end
+
+--- The zone a kind of writ is handed in, for the player's side: the kind's zone, or
+--- UNKNOWN_ZONE when no turn-in is known for it.
+local UNKNOWN_ZONE = "?"
+local function kindZone(kind)
+  local other
+  for _, writ in ipairs(ns.writs) do
+    if writ.writItem == kind.writItem then
+      local npc = ns.WritNpc(writ)
+      if npc then
+        if ns.ForPlayer(writ) then return npc.zone end
+        other = other or npc.zone
+      end
+    end
+  end
+  return other or UNKNOWN_ZONE
 end
 
 local function itemName(id, fallback)
@@ -452,12 +470,14 @@ local function pack(groups)
 end
 
 --- Sets in the bags (one per writ, when there is material enough for it), packed into
---- mails (see pack).
-function ns.PlanMail()
+--- mails (see pack). With `zone`, only the writs handed in there (UNKNOWN_ZONE: those
+--- with no known turn-in); the others leave their material for these.
+function ns.PlanMail(zone)
   local total, take = bagPool()
   local groups = {}
   for _, writ in ipairs(writKinds()) do
-    if total(writ.writItem) >= 1 and total(writ.item) >= writ.count then
+    if (not zone or kindZone(writ) == zone)
+      and total(writ.writItem) >= 1 and total(writ.item) >= writ.count then
       local pieces = {}
       attach(take, pieces, writ.writItem, 1, true)
       attach(take, pieces, writ.item, writ.count)
@@ -515,6 +535,47 @@ end
 function ns.SetMailWhat(what)
   ns.db.mailWhat = what
   ns.Changed()
+end
+
+--- Which writ sets the Transfer page mails: nil for all writs, else a zone's name (or
+--- UNKNOWN_ZONE).
+local function mailZone()
+  return ns.db and ns.db.mailZone or nil
+end
+
+function ns.SetMailZone(zone)
+  ns.db.mailZone = zone
+  ns.Changed()
+end
+
+--- How a zone choice reads: "All zones", the zone's name, or "Turn-in unknown".
+function ns.MailZoneName(zone)
+  if not zone then return "All zones" end
+  if zone == UNKNOWN_ZONE then return "Turn-in unknown" end
+  return zone
+end
+
+--- The zones the writs in the bags are handed in, each with the sets the bags hold for
+--- it: { { zone, sets }, ... } by name, the unknown last. The chosen zone is listed even
+--- when the bags hold none for it.
+function ns.MailZones()
+  local bags, seen, out = counts("bags"), {}, {}
+  local function add(zone)
+    if seen[zone] then return end
+    seen[zone] = true
+    local sets = 0
+    for _, m in ipairs(ns.PlanMail(zone)) do sets = sets + #m.sets end
+    out[#out + 1] = { zone = zone, sets = sets }
+  end
+  for _, writ in ipairs(writKinds()) do
+    if (bags[writ.writItem] or 0) > 0 then add(kindZone(writ)) end
+  end
+  if mailZone() then add(mailZone()) end
+  table.sort(out, function(a, b)
+    if (a.zone == UNKNOWN_ZONE) ~= (b.zone == UNKNOWN_ZONE) then return b.zone == UNKNOWN_ZONE end
+    return a.zone < b.zone
+  end)
+  return out
 end
 
 local function money(copper)
@@ -759,10 +820,10 @@ function ns.ForgetMailTarget(address)
   ns.Changed()
 end
 
---- How many sets the bags hold for mail.
-function ns.MailSetCount()
+--- How many sets the bags hold for mail (with `zone`, for that zone's writs).
+function ns.MailSetCount(zone)
   local n = 0
-  for _, m in ipairs(ns.PlanMail()) do n = n + #m.sets end
+  for _, m in ipairs(ns.PlanMail(zone)) do n = n + #m.sets end
   return n
 end
 
@@ -776,16 +837,21 @@ local function showSendTab()
 end
 
 --- Mail to "Name Surname" what the Transfer page has chosen: one set of each writ in the
---- bags, or every crate with the material to fill it. On the inbox tab, it switches to
---- Send Mail first.
+--- bags (all, or the chosen zone's), or every crate with the material to fill it. On the
+--- inbox tab, it switches to Send Mail first.
 function ns.MailSets(address)
   address = tidy(address)
   if address == "" then return say("Enter a name.") end
   if not mailOpen then return say("Open a mailbox.") end
   if job or mail then return say("A transfer is running.") end
   local crates = mailWhat() == "crates"
-  local mails = crates and ns.PlanCrateMail() or ns.PlanMail()
-  if #mails == 0 then return say(crates and "No crate in bags." or "No full set in bags.") end
+  local zone = not crates and mailZone() or nil
+  local mails = crates and ns.PlanCrateMail() or ns.PlanMail(zone)
+  if #mails == 0 then
+    if crates then return say("No crate in bags.") end
+    if zone then return say(("No full set in bags for %s."):format(ns.MailZoneName(zone))) end
+    return say("No full set in bags.")
+  end
   if not showSendTab() then return say("Open the Send Mail tab.") end
   if attachments() > 0 then return say("Clear the mail's attachments.") end
   if not window then makeWindow() end
@@ -854,6 +920,30 @@ function ns.BuildTransfer(parent, width)
     c.what = w[1]
     f.what[i] = c
   end
+  -- Writ sets: all of them or one zone's, picked from a list under the button.
+  f.zoneLabel = f:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+  f.zoneLabel:SetPoint("TOPLEFT", 296, -70)
+  f.zoneLabel:SetText("Zone")
+  f.zone = ns.Skin.Button(f, "", 190, 22)
+  f.zone:SetPoint("TOPLEFT", 334, -64)
+  f.zone.arrow = f.zone:CreateTexture(nil, "OVERLAY")
+  f.zone.arrow:SetTexture("Interface/ChatFrame/ChatFrameExpandArrow")
+  f.zone.arrow:SetSize(12, 12)
+  f.zone.arrow:SetPoint("RIGHT", -6, 0)
+  f.zone.arrow:SetRotation(-math.pi / 2)
+  f.zoneList = CreateFrame("Frame", nil, f)
+  f.zoneList:SetPoint("TOPLEFT", f.zone, "BOTTOMLEFT", 0, -2)
+  f.zoneList:SetFrameLevel(f:GetFrameLevel() + 20)
+  f.zoneList:EnableMouse(true)
+  local listBack = ns.Skin.Fill(f.zoneList, ns.Skin.color.window, "BACKGROUND")
+  listBack:SetAllPoints()
+  ns.Skin.Border(f.zoneList, ns.Skin.color.choiceEdge, "BORDER")
+  f.zoneList:Hide()
+  f.zoneList.entries = {}
+  f.zone:SetScript("OnClick", function()
+    if f.zoneList:IsShown() then f.zoneList:Hide() else f.zoneList:Show() f:Refresh() end
+  end)
+  f:SetScript("OnHide", function() f.zoneList:Hide() end)
   f.targets = {}
   f.forget = {}
   f.custom = CreateFrame("EditBox", nil, f, "InputBoxTemplate")
@@ -905,6 +995,43 @@ function ns.BuildTransfer(parent, width)
     region:SetPoint("TOPLEFT", left or 10, top)
   end
 
+  -- The zone button says the choice and its sets; its list, when open, has All zones and
+  -- each zone the writs in the bags go to, in columns of up to ZONE_ROWS (two fit the page).
+  local ZONE_ROWS, ZONE_W, ZONE_H = 20, 190, 20
+  function f:RefreshZones(zone, all)
+    local zones = ns.MailZones()
+    local label = ns.MailZoneName(zone) .. ("  (%d)"):format(all)
+    local choices = { { zone = nil, sets = all } }
+    for _, z in ipairs(zones) do
+      choices[#choices + 1] = z
+      if z.zone == zone then label = ("%s  (%d)"):format(ns.MailZoneName(zone), z.sets) end
+    end
+    self.zone:SetText(label)
+    local list = self.zoneList
+    if not list:IsShown() then return end
+    for _, e in ipairs(list.entries) do e:Hide() end
+    for i, c in ipairs(choices) do
+      local e = list.entries[i]
+      if not e then
+        e = ns.Skin.Choice(list, ZONE_W - 4, ZONE_H)
+        list.entries[i] = e
+      end
+      local col, row = math.floor((i - 1) / ZONE_ROWS), (i - 1) % ZONE_ROWS
+      e:ClearAllPoints()
+      e:SetPoint("TOPLEFT", 2 + col * ZONE_W, -2 - row * (ZONE_H + 2))
+      e:SetText(("%s  (%d)"):format(ns.MailZoneName(c.zone), c.sets))
+      e:SetActive(c.zone == zone)
+      e:SetScript("OnClick", function()
+        list:Hide()
+        ns.SetMailZone(c.zone)
+      end)
+      e:Show()
+    end
+    local cols = math.ceil(#choices / ZONE_ROWS)
+    local rows = math.min(#choices, ZONE_ROWS)
+    list:SetSize(cols * ZONE_W, rows * (ZONE_H + 2) + 2)
+  end
+
   function f:Refresh()
     -- Mail
     local what = mailWhat()
@@ -917,10 +1044,23 @@ function ns.BuildTransfer(parent, width)
         .. ("   Crates in bags: %d, material for %d"):format(plan.crates, plan.filled))
       note = "Every crate, with the material in the bags to fill it: cheapest first, by the last AH prices."
     else
-      sets = ns.MailSetCount()
-      self.mailState:SetText(stateText(mailOpen, "Mailbox") .. ("   Sets in bags: %d"):format(sets))
-      note = "One set per writ: the writ and its material."
+      local zone = mailZone()
+      local all = ns.MailSetCount()
+      sets = zone and ns.MailSetCount(zone) or all
+      if zone then
+        self.mailState:SetText(stateText(mailOpen, "Mailbox")
+          .. ("   Sets in bags: %d for %s, %d in all"):format(sets, ns.MailZoneName(zone), all))
+        note = zone == UNKNOWN_ZONE
+          and "One set per writ with no known turn-in: the writ and its material."
+          or ("One set per writ handed in in %s: the writ and its material."):format(zone)
+      else
+        self.mailState:SetText(stateText(mailOpen, "Mailbox") .. ("   Sets in bags: %d"):format(sets))
+        note = "One set per writ: the writ and its material."
+      end
+      self:RefreshZones(zone, all)
     end
+    for _, region in ipairs({ self.zoneLabel, self.zone }) do region:SetShown(what == "writs") end
+    if what ~= "writs" then self.zoneList:Hide() end
     self.mailNote:SetText(note)
     local targets = ns.MailRecipients()
     local unknown = false
