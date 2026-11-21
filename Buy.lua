@@ -858,7 +858,7 @@ events:SetScript("OnEvent", function(_, event, ...)
     buy.late = false
     bought(s.qty)
   elseif event == "UI_ERROR_MESSAGE" and buy.state == "paying" then
-    local _, message = ...
+    local message = ns.Readable((select(2, ...)))
     failed(type(message) == "string" and message or "Purchase failed.")
   end
 end)

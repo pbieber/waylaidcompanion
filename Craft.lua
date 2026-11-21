@@ -648,6 +648,7 @@ events:SetScript("OnEvent", function(_, event, addon, fn)
   if event == "PLAYER_REGEN_ENABLED" then return refresh() end
   if not CAN then return end
   if BLOCKED[event] then
+    fn = ns.Readable(fn)
     if addon == ADDON and type(fn) == "string" and fn:find("CraftRecipe") then
       blocked = true
       refresh()

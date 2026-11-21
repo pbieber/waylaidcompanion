@@ -159,13 +159,7 @@ local function shops(faction)
   return list
 end
 
---- A unit value the addon may read, or nil (newer clients hide some as secret).
-local function readable(v)
-  if v == nil then return nil end
-  if issecretvalue and issecretvalue(v) then return nil end
-  if canaccessvalue and not canaccessvalue(v) then return nil end
-  return v
-end
+local readable = ns.Readable
 
 --- The open shop's key in shops(): its NPC id, or its name.
 local function shopKey()

@@ -12,6 +12,16 @@ local ADDON, ns = ...
 ns.TITLE = "Pugger Waylaid Companion"
 ns.ICON = "Interface/AddOns/PuggerWaylaidCompanion/Media/pugger"
 
+--- The value, or nil when the game hands it out as a secret. Newer clients do that for
+--- unit GUIDs and names in some windows and for chat text in combat, and an addon that
+--- so much as indexes one is stopped with an error.
+function ns.Readable(v)
+  if v == nil then return nil end
+  if issecretvalue and issecretvalue(v) then return nil end
+  if canaccessvalue and not canaccessvalue(v) then return nil end
+  return v
+end
+
 -- Writ tiers by index, as Data/Writs.lua stores them.
 ns.WRIT_TIERS = { "Journeyman", "Expert", "Artisan" }
 ns.WRIT_REP = { 75, 125, 200 }
@@ -129,8 +139,8 @@ function ns.SaveHoldings()
   db.bags[key] = bags
   if bank then db.bank[key] = bank end
   -- WoW Forever gives the surname where other clients give the realm.
-  local _, surname = UnitName("player")
-  if type(surname) == "string" and surname ~= "" and not (issecretvalue and issecretvalue(surname)) then
+  local surname = ns.Readable((select(2, UnitName("player"))))
+  if type(surname) == "string" and surname ~= "" then
     db.surnames = db.surnames or {}
     db.surnames[key] = surname
   end

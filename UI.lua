@@ -1562,6 +1562,8 @@ for _, event in ipairs({ "NEW_RECIPE_LEARNED", "LEARNED_SPELL_IN_TAB", "SKILL_LI
   pcall(learnEvents.RegisterEvent, learnEvents, event)
 end
 learnEvents:SetScript("OnEvent", function(_, event, text)
+  -- In combat the chat text comes as a secret: skip it, the other events still clear the cache.
+  text = ns.Readable(text)
   if event == "CHAT_MSG_SYSTEM" and not (type(text) == "string" and text:find(LEARN_RECIPE)) then return end
   if next(known) then
     known = {}

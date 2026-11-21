@@ -19,15 +19,7 @@ local UNNAMED = "Writ customer"
 -- Two map points this close (in map percent) are the same place.
 local NEAR = 1.0
 
---- The value, or nil when the game hands it out as a secret: newer clients do that for
---- unit GUIDs and names in some windows, and an addon that so much as turns one into
---- text is stopped with an error.
-local function readable(v)
-  if v == nil then return nil end
-  if issecretvalue and issecretvalue(v) then return nil end
-  if canaccessvalue and not canaccessvalue(v) then return nil end
-  return v
-end
+local readable = ns.Readable
 
 local function npcId(guid)
   guid = readable(guid)

@@ -704,7 +704,7 @@ mailEvents:SetScript("OnEvent", function(_, event, ...)
       mail.state = "failed"
       showMail(ns.Color(RED, "Not sent."), nil)
     elseif event == "UI_ERROR_MESSAGE" then
-      local _, message = ...
+      local message = ns.Readable((select(2, ...)))
       if type(message) == "string" then
         mail.state = "failed"
         showMail(ns.Color(RED, "Not sent: " .. message), nil)
