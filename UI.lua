@@ -1537,6 +1537,38 @@ local function recipeSkill(id, profession)
   return best
 end
 
+local KNOWN = ITEM_SPELL_KNOWN or "Already known"
+local known = {}
+--- Whether the character already knows what an item teaches: its tooltip says "Already
+--- known". Kept until the character learns something (below); unknown while the game has
+--- no data for the item.
+local function learned(id)
+  if known[id] ~= nil then return known[id] end
+  local lines = itemLines(id)
+  if #lines == 0 then return false end
+  local found = false
+  for _, text in ipairs(lines) do
+    if text == KNOWN then found = true break end
+  end
+  known[id] = found
+  return found
+end
+
+-- "You have learned how to create a new item: %s." as a pattern.
+local LEARN_RECIPE = "^" .. (ERR_LEARN_RECIPE_S or "You have learned how to create a new item: %s.")
+  :gsub("([%(%)%.%%%+%-%*%?%[%]%^%$])", "%%%1"):gsub("%%%%s", ".+") .. "$"
+local learnEvents = CreateFrame("Frame")
+for _, event in ipairs({ "NEW_RECIPE_LEARNED", "LEARNED_SPELL_IN_TAB", "SKILL_LINES_CHANGED", "CHAT_MSG_SYSTEM" }) do
+  pcall(learnEvents.RegisterEvent, learnEvents, event)
+end
+learnEvents:SetScript("OnEvent", function(_, event, text)
+  if event == "CHAT_MSG_SYSTEM" and not (type(text) == "string" and text:find(LEARN_RECIPE)) then return end
+  if next(known) then
+    known = {}
+    ns.Changed()
+  end
+end)
+
 pages.rewards = {
   title = "Rewards",
   build = function()
@@ -1600,7 +1632,8 @@ pages.rewards = {
               name,
               item.standing and ns.StandingName(item.standing) or ns.Color(GREY, "None"),
               rewardCost(item),
-              open and ns.Color(GREEN, "Available") or ns.Color(GREY, "Locked"),
+              (learned(item.id) and CHEAPEST .. ns.Color(GREEN, "Learned"))
+                or (open and ns.Color(GREEN, "Available")) or ns.Color(GREY, "Locked"),
             },
           }
         end
