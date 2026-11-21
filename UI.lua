@@ -1278,7 +1278,7 @@ end
 pages.turnins = {
   title = "Turn-ins",
   sortKey = "turninSort",
-  sorts = { { "name", "By name" }, { "cost", "By cost" } },
+  sorts = { { "name", "By name" }, { "cost", "By cost" }, { "rep", "By rep" } },
   footer = "scan",
   scanScope = "writs",  -- its scan and Cost switch are the writs page's
   build = function()
@@ -1295,10 +1295,11 @@ pages.turnins = {
         click = function() ns.OpenMap(camp.map) end,
       }
     end
-    -- Writ turn-ins, a continent at a time, then a zone at a time: by name, or cheapest
-    -- first (as the Cost switch has it), the zones within their continent and the
-    -- recipients within their zone.
-    local byCost = ns.db.turninSort == "cost"
+    -- Writ turn-ins, a continent at a time, then a zone at a time: by name, cheapest
+    -- first (as the Cost switch has it), or most reputation open today first (cheaper
+    -- first among equals), the zones within their continent and the recipients within
+    -- their zone.
+    local byCost, byRep = ns.db.turninSort == "cost", ns.db.turninSort == "rep"
     local zones, byKey = {}, {}
     for _, stop in ipairs(ns.Stops()) do
       stop.continent = ns.Continent(stop.npc.map)
@@ -1323,6 +1324,12 @@ pages.turnins = {
       if a and b and a ~= b then return a < b end
       return nil
     end
+    --- By rep: the most reputation from the writs open today first, then by cost.
+    local function moreRep(x, y)
+      if x.rep ~= y.rep then return x.rep > y.rep end
+      return cheaper(x, y)
+    end
+    local order = (byCost and cheaper) or (byRep and moreRep) or nil
     table.sort(zones, function(x, y)
       if x.continent ~= y.continent then
         -- Whatever the game can't place goes last.
@@ -1330,16 +1337,16 @@ pages.turnins = {
         if y.continent == "Elsewhere" then return true end
         return x.continent < y.continent
       end
-      if byCost then
-        local first = cheaper(x.cost, y.cost)
+      if order then
+        local first = order(x.cost, y.cost)
         if first ~= nil then return first end
       end
       return x.name < y.name
     end)
     for _, zone in ipairs(zones) do
       table.sort(zone.stops, function(x, y)
-        if byCost then
-          local first = cheaper(x.cost, y.cost)
+        if order then
+          local first = order(x.cost, y.cost)
           if first ~= nil then return first end
         end
         return x.npc.name < y.npc.name
