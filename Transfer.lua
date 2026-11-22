@@ -772,7 +772,7 @@ local function makeWindow()
   window:SetScript("OnHide", function() if mail then endMail(nil) end end)
 end
 
---- One-click mail targets: the account's other characters on this realm, then the names
+--- One-click mail targets: the account's other characters, then the names
 --- saved by hand. { { name, address, saved }, ... }; address is the full "Name Surname",
 --- nil for a character the addon hasn't seen played yet.
 function ns.MailRecipients()
@@ -780,7 +780,7 @@ function ns.MailRecipients()
   for _, source in ipairs({ db.bags or {}, db.bank or {}, db.mail or {} }) do
     for key in pairs(source) do
       local name = ns.CharacterName(key)
-      if key ~= me and not seen[key] and not name:find("-", 1, true) then
+      if key ~= me and not seen[key] then
         seen[key] = true
         local address = ns.MailAddress(key)
         out[#out + 1] = { name = address or name, address = address }

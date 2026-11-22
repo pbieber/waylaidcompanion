@@ -12,6 +12,8 @@ The window: a menu down the left, a page on the right.
 
 Each list page builds plain entries ({ header = ... } or { cells = {...} }) and hands them
 to one shared list, which draws them with pooled rows.
+The writs, crates, turn-ins and rewards pages have a search box beside their sort buttons:
+it keeps the rows whose names match, and opens every group while it holds text.
 ]]
 
 local ADDON, ns = ...
@@ -676,6 +678,35 @@ local function itemColored(id, tierHex, text)
   return tierHex and ns.Color(tierHex, text) or text
 end
 
+-- What each page with a search box (writs, crates, turn-ins, rewards) was searched for,
+-- kept until the interface reloads.
+local searches = {}
+
+--- The text searched for on the page shown, lower case and trimmed; nil when none.
+local function searchTerm()
+  local text = searches[ns.db.page]
+  text = text and text:lower():match("^%s*(.-)%s*$")
+  if not text or text == "" then return nil end
+  return text
+end
+
+--- Whether one of the texts after `term` holds it, ignoring case and colour codes.
+local function matches(term, ...)
+  for i = 1, select("#", ...) do
+    local text = select(i, ...)
+    if text then
+      text = tostring(text):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):lower()
+      if text:find(term, 1, true) then return true end
+    end
+  end
+  return false
+end
+
+--- The row a searched page shows when nothing on it matches.
+local function noMatch(term)
+  return { header = ns.Color(GREY, ('Nothing matches "%s".'):format(term)) }
+end
+
 --- A group's header row, which folds the group away or opens it again on a click, and
 --- whether the group is folded. Remembered per page, sort and group; a group that starts
 --- folded stays so until opened. `color` is the bar on its left (the accent without
@@ -685,6 +716,10 @@ local function groupHeader(page, sort, group, text, startFolded, color, sub)
   local stored = ns.db.collapsed[key]
   local folded
   if stored == nil then folded = startFolded == true else folded = stored == true end
+  -- While the page is searched, every group shows what matched, and doesn't fold.
+  if searchTerm() then
+    return { header = text, color = color, sub = sub }, false
+  end
   return {
     header = text,
     color = color,
@@ -798,15 +833,19 @@ local COST_HEADERS = {
 
 pages.writs = {
   title = "Craftsman's Writs",
+  search = true,
   sortKey = "writSort",
   sorts = { { "level", "By tier" }, { "profession", "By profession" }, { "cost", "By cost" } },
   footer = "scan",
   order = { 1, 2, 4, 5, 6, 7, 3 },  -- the reputation at the end of the row
   build = function()
     local sort = ns.db.writSort
+    local term = searchTerm()
     local sorted, costs = {}, {}
     for _, writ in ipairs(ns.writs) do
-      if ns.ForPlayer(writ) then
+      local npc = term and ns.WritNpc(writ)
+      if ns.ForPlayer(writ) and (not term or matches(term, writ.name, ns.Item(writ.item, writ.name),
+          writ.profession, ns.WRIT_TIERS[writ.tier], npc and npc.name, npc and npc.zone)) then
         sorted[#sorted + 1] = writ
         costs[writ] = ns.WritCost(writ)
       end
@@ -861,6 +900,7 @@ pages.writs = {
       head.right = ("%d / %d done"):format(done, total)
       if not folded then entries[#entries + 1] = writEntry(writ, sort, costs[writ]) end
     end
+    if term and #entries == 0 then entries[1] = noMatch(term) end
     local headings = {
       "Writ", sort == "profession" and "Tier" or "Profession", "Rep",
       { writCostHeading(), writCostTip() },
@@ -977,6 +1017,7 @@ end
 
 pages.crates = {
   title = "Waylaid Crates",
+  search = true,
   sortKey = "crateSort",
   sorts = { { "level", "By tier" }, { "profession", "By profession" }, { "cost", "By cost" } },
   footer = "scan",
@@ -985,10 +1026,26 @@ pages.crates = {
     local byCost = sort == "cost"
     local kindOrder = {}
     for i, kind in ipairs(ns.CRATE_KINDS) do kindOrder[kind] = i end
+    -- Searched: a crate whose name, profession or tier matches shows with all its
+    -- materials; otherwise it shows with the materials that match, if any.
+    local term = searchTerm()
+    local crateHit, bundleHit = {}, {}
     local sorted, costs = {}, {}
     for _, crate in ipairs(ns.crates) do
-      sorted[#sorted + 1] = crate
-      costs[crate] = ns.CrateCost(crate)
+      local shown = true
+      if term then
+        crateHit[crate] = matches(term, crate.name, ns.Item(crate.item), crate.kind,
+          ns.CRATE_SKILL[crate.kind], ns.CRATE_TIERS[crate.tier])
+        shown = crateHit[crate]
+        for _, bundle in ipairs(crate.bundles) do
+          bundleHit[bundle] = matches(term, ns.Item(bundle.item, bundle.name))
+          shown = shown or bundleHit[bundle]
+        end
+      end
+      if shown then
+        sorted[#sorted + 1] = crate
+        costs[crate] = ns.CrateCost(crate)
+      end
     end
     table.sort(sorted, function(a, b)
       if byCost then
@@ -1091,7 +1148,9 @@ pages.crates = {
         }
         -- Sorted by cost, a crate's materials are too, cheapest first.
         local bundles = {}
-        for _, bundle in ipairs(crate.bundles) do bundles[#bundles + 1] = bundle end
+        for _, bundle in ipairs(crate.bundles) do
+          if not term or crateHit[crate] or bundleHit[bundle] then bundles[#bundles + 1] = bundle end
+        end
         if byCost then
           table.sort(bundles, function(a, b)
             local x, y = cost.bundles[a].material, cost.bundles[b].material
@@ -1159,6 +1218,7 @@ pages.crates = {
         end
       end
     end
+    if term and #entries == 0 then entries[1] = noMatch(term) end
     return entries, CRATE_COLUMNS, nil, {
       "Crate", sort == "profession" and "Tier" or "Profession", "Favor",
       { crateCostHeading(), crateCostTip() },
@@ -1277,14 +1337,16 @@ end
 
 pages.turnins = {
   title = "Turn-ins",
+  search = true,
   sortKey = "turninSort",
   sorts = { { "name", "By name" }, { "cost", "By cost" }, { "rep", "By rep" } },
   footer = "scan",
   scanScope = "writs",  -- its scan and Cost switch are the writs page's
   build = function()
     local entries = {}
+    local term = searchTerm()
     local camp = ns.Camp()
-    if camp then
+    if camp and (not term or matches(term, "Waylaid Crates", camp.name, camp.zone)) then
       entries[#entries + 1] = { header = "Waylaid Crates" }
       entries[#entries + 1] = {
         icon = "Interface/Icons/INV_Crate_01",
@@ -1352,76 +1414,96 @@ pages.turnins = {
         return x.npc.name < y.npc.name
       end)
     end
+    -- Searched: a zone whose name or continent matches shows all its recipients; otherwise
+    -- the recipients whose name, or one of whose writs or materials, matches. The zone's
+    -- header still counts, prices and buys for the whole zone.
+    local function stopHit(stop)
+      if matches(term, stop.npc.name) then return true end
+      for _, writ in ipairs(stop.writs) do
+        if matches(term, writ.name, ns.Item(writ.item, writ.name), writ.profession) then return true end
+      end
+      return false
+    end
     local continent
     for _, zone in ipairs(zones) do
-      if zone.continent ~= continent then
-        continent = zone.continent
-        entries[#entries + 1] = { header = "Craftsman's Writs: " .. continent }
+      local stops = zone.stops
+      if term and not matches(term, zone.name, zone.continent) then
+        stops = {}
+        for _, stop in ipairs(zone.stops) do
+          if stopHit(stop) then stops[#stops + 1] = stop end
+        end
       end
-      -- A quiet header that doesn't fold; at the auction house it buys for all the
-      -- zone's recipients (Buy.lua).
-      local cost = zone.cost
-      entries[#entries + 1] = {
-        header = zone.name,
-        minor = true,
-        indent = 16,
-        sub = ("%d NPC%s, %d of %d open, +%d rep"):format(#zone.stops, #zone.stops == 1 and "" or "s",
-          zone.open, #zone.writs, cost.rep),
-        right = cost.done and ns.Color(GREY, "Done") or costText(cost),
-        key = "zone:" .. zone.continent .. ":" .. zone.name,
-        scan = writItems(zone.writs),
-        value = not cost.done and writValue(cost) or nil,
-        tip = function()
-          if ns.AuctionHouseOpen() and ns.CanBuy() and zone.open > 0 then
-            return zone.name .. "\n|cff40d040Click: buy the writs open today here and their material.|r"
-          end
-        end,
-        click = function()
-          if ns.AuctionHouseOpen() and ns.CanBuy() and zone.open > 0 then ns.BuyForStops(zone.stops, zone.name) end
-        end,
-      }
-      for _, stop in ipairs(zone.stops) do
-        local npc = stop.npc
-        local names = {}
-        for _, writ in ipairs(stop.writs) do
-          local state = ns.WritState(writ)
-          local value = state ~= "done" and writValue(ns.WritCost(writ))
-          names[#names + 1] = ns.Color(ns.WRIT_COLOR[writ.tier], writ.name)
-            .. (state == "done" and ns.Color(GREY, " (done)") or "")
-            .. (value and ("  " .. ns.SignedCoins(value)) or "")
+      if #stops > 0 then
+        if zone.continent ~= continent then
+          continent = zone.continent
+          entries[#entries + 1] = { header = "Craftsman's Writs: " .. continent }
         end
-        local status
-        if stop.open == 0 then
-          status = ns.Color(GREY, "Done")
-        elseif stop.held > 0 then
-          status = ns.Color(GREEN, ("%d in bags"):format(stop.held))
-        else
-          status = ("%d of %d open"):format(stop.open, #stop.writs)
-        end
-        local stopCost = stop.cost
-        local tip = npc.name .. "\n" .. table.concat(names, "\n")
+        -- A quiet header that doesn't fold; at the auction house it buys for all the
+        -- zone's recipients (Buy.lua).
+        local cost = zone.cost
         entries[#entries + 1] = {
-          icon = "Interface/Icons/INV_Misc_Note_01",
+          header = zone.name,
+          minor = true,
           indent = 16,
-          flat = true,
-          key = "npc:" .. npc.id,
-          scan = writItems(stop.writs),
-          value = not stopCost.done and writValue(stopCost) or nil,
+          sub = ("%d NPC%s, %d of %d open, +%d rep"):format(#zone.stops, #zone.stops == 1 and "" or "s",
+            zone.open, #zone.writs, cost.rep),
+          right = cost.done and ns.Color(GREY, "Done") or costText(cost),
+          key = "zone:" .. zone.continent .. ":" .. zone.name,
+          scan = writItems(zone.writs),
+          value = not cost.done and writValue(cost) or nil,
           tip = function()
-            if ns.AuctionHouseOpen() and ns.CanBuy() then
-              return tip .. "\n|cff40d040Click: buy the writs open today and their material.|r"
+            if ns.AuctionHouseOpen() and ns.CanBuy() and zone.open > 0 then
+              return zone.name .. "\n|cff40d040Click: buy the writs open today here and their material.|r"
             end
-            return tip .. "\nClick: map."
           end,
-          cells = { npc.name, ("%.1f, %.1f"):format(npc.x, npc.y), status,
-            stopCost.done and "" or costText(stopCost) },
-          -- At the auction house: buy this recipient's writs and material (Buy.lua).
           click = function()
-            if ns.AuctionHouseOpen() and ns.CanBuy() then ns.BuyForStop(stop) else ns.OpenMap(npc.map) end
+            if ns.AuctionHouseOpen() and ns.CanBuy() and zone.open > 0 then ns.BuyForStops(zone.stops, zone.name) end
           end,
         }
+        for _, stop in ipairs(stops) do
+          local npc = stop.npc
+          local names = {}
+          for _, writ in ipairs(stop.writs) do
+            local state = ns.WritState(writ)
+            local value = state ~= "done" and writValue(ns.WritCost(writ))
+            names[#names + 1] = ns.Color(ns.WRIT_COLOR[writ.tier], writ.name)
+              .. (state == "done" and ns.Color(GREY, " (done)") or "")
+              .. (value and ("  " .. ns.SignedCoins(value)) or "")
+          end
+          local status
+          if stop.open == 0 then
+            status = ns.Color(GREY, "Done")
+          elseif stop.held > 0 then
+            status = ns.Color(GREEN, ("%d in bags"):format(stop.held))
+          else
+            status = ("%d of %d open"):format(stop.open, #stop.writs)
+          end
+          local stopCost = stop.cost
+          local tip = npc.name .. "\n" .. table.concat(names, "\n")
+          entries[#entries + 1] = {
+            icon = "Interface/Icons/INV_Misc_Note_01",
+            indent = 16,
+            flat = true,
+            key = "npc:" .. npc.id,
+            scan = writItems(stop.writs),
+            value = not stopCost.done and writValue(stopCost) or nil,
+            tip = function()
+              if ns.AuctionHouseOpen() and ns.CanBuy() then
+                return tip .. "\n|cff40d040Click: buy the writs open today and their material.|r"
+              end
+              return tip .. "\nClick: map."
+            end,
+            cells = { npc.name, ("%.1f, %.1f"):format(npc.x, npc.y), status,
+              stopCost.done and "" or costText(stopCost) },
+            -- At the auction house: buy this recipient's writs and material (Buy.lua).
+            click = function()
+              if ns.AuctionHouseOpen() and ns.CanBuy() then ns.BuyForStop(stop) else ns.OpenMap(npc.map) end
+            end,
+          }
+        end
       end
     end
+    if term and #entries == 0 then entries[1] = noMatch(term) end
     local known, total = ns.KnownTurnIns()
     return entries, STOP_COLUMNS, nil, {
       { "NPC", ("On the world map (/pwc map). Known turn-ins: %d of %d."):format(known, total) },
@@ -1573,6 +1655,7 @@ end)
 
 pages.rewards = {
   title = "Rewards",
+  search = true,
   build = function()
     local saved, rep = ns.Rewards()
     local headings = { "Item", "Standing", "Cost", "Status" }
@@ -1595,62 +1678,75 @@ pages.rewards = {
       return (a.shop.npc or "") < (b.shop.npc or "")
     end)
     local entries = {}
+    -- Searched: a shop whose profession or quartermaster matches shows all it sells;
+    -- otherwise the items that match, if any.
+    local term = searchTerm()
     for _, s in ipairs(shops) do
-      local title = ("|T%s:16:16|t %s"):format(s.icon or MISC_ICON, s.profession or "Misc")
-      local header, folded = groupHeader("rewards", "npc", s.key, title, nil, nil,
-        ("(%d)"):format(#s.shop.items))
-      -- The quartermaster on the right, a shop without recipes ("Misc") too.
-      header.right = s.shop.npc
-      header.portrait = type(s.key) == "number" and s.key or nil
-      entries[#entries + 1] = header
-      if not folded then
-        local forFavor, other, info = {}, {}, {}
+      local items = s.shop.items
+      if term and not matches(term, s.profession or "Misc", s.shop.npc) then
+        items = {}
         for _, item in ipairs(s.shop.items) do
-          local name = ns.Item(item.id, item.name)
-          info[item] = { name = name, favor = favorCost(item), skill = recipeSkill(item.id, s.profession) }
-          table.insert(info[item].favor and forFavor or other, item)
+          if matches(term, ns.Item(item.id, item.name)) then items[#items + 1] = item end
         end
-        -- Unknown amounts and skills (the game has not sent the item yet) last.
-        local function order(a, b)
-          local x, y = info[a], info[b]
-          if x.favor ~= y.favor then return (x.favor or math.huge) < (y.favor or math.huge) end
-          if x.skill ~= y.skill then return (x.skill or math.huge) < (y.skill or math.huge) end
-          return x.name < y.name
-        end
-        table.sort(forFavor, order)
-        table.sort(other, order)
-        local function add(item)
-          local name, icon = info[item].name, select(2, ns.Item(item.id, item.name))
-          local quality = GetItemInfo and select(3, GetItemInfo(item.id))
-          local color = quality and ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[quality]
-          if color and color.hex then name = color.hex .. name .. "|r" end
-          if (item.quantity or 1) > 1 then name = item.quantity .. " x " .. name end
-          if info[item].skill then name = name .. ns.Color(GREY, (" (%d)"):format(info[item].skill)) end
-          local open = not item.standing or rep.standing >= item.standing
-          entries[#entries + 1] = {
-            icon = icon or item.icon,
-            item = item.id,
-            cells = {
-              name,
-              item.standing and ns.StandingName(item.standing) or ns.Color(GREY, "None"),
-              rewardCost(item),
-              (learned(item.id) and CHEAPEST .. ns.Color(GREEN, "Learned"))
-                or (open and ns.Color(GREEN, "Available")) or ns.Color(GREY, "Locked"),
-            },
-          }
-        end
-        for _, item in ipairs(forFavor) do add(item) end
-        if #other > 0 then
-          local sub, subFolded = groupHeader("rewards", "other", s.key,
-            "Not for Merchant's Favor", true, GREY, ("(%d)"):format(#other))
-          sub.indent = 16
-          entries[#entries + 1] = sub
-          if not subFolded then
-            for _, item in ipairs(other) do add(item) end
+      end
+      if #items > 0 then
+        local title = ("|T%s:16:16|t %s"):format(s.icon or MISC_ICON, s.profession or "Misc")
+        local header, folded = groupHeader("rewards", "npc", s.key, title, nil, nil,
+          ("(%d)"):format(#items))
+        -- The quartermaster on the right, a shop without recipes ("Misc") too.
+        header.right = s.shop.npc
+        header.portrait = type(s.key) == "number" and s.key or nil
+        entries[#entries + 1] = header
+        if not folded then
+          local forFavor, other, info = {}, {}, {}
+          for _, item in ipairs(items) do
+            local name = ns.Item(item.id, item.name)
+            info[item] = { name = name, favor = favorCost(item), skill = recipeSkill(item.id, s.profession) }
+            table.insert(info[item].favor and forFavor or other, item)
+          end
+          -- Unknown amounts and skills (the game has not sent the item yet) last.
+          local function order(a, b)
+            local x, y = info[a], info[b]
+            if x.favor ~= y.favor then return (x.favor or math.huge) < (y.favor or math.huge) end
+            if x.skill ~= y.skill then return (x.skill or math.huge) < (y.skill or math.huge) end
+            return x.name < y.name
+          end
+          table.sort(forFavor, order)
+          table.sort(other, order)
+          local function add(item)
+            local name, icon = info[item].name, select(2, ns.Item(item.id, item.name))
+            local quality = GetItemInfo and select(3, GetItemInfo(item.id))
+            local color = quality and ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[quality]
+            if color and color.hex then name = color.hex .. name .. "|r" end
+            if (item.quantity or 1) > 1 then name = item.quantity .. " x " .. name end
+            if info[item].skill then name = name .. ns.Color(GREY, (" (%d)"):format(info[item].skill)) end
+            local open = not item.standing or rep.standing >= item.standing
+            entries[#entries + 1] = {
+              icon = icon or item.icon,
+              item = item.id,
+              cells = {
+                name,
+                item.standing and ns.StandingName(item.standing) or ns.Color(GREY, "None"),
+                rewardCost(item),
+                (learned(item.id) and CHEAPEST .. ns.Color(GREEN, "Learned"))
+                  or (open and ns.Color(GREEN, "Available")) or ns.Color(GREY, "Locked"),
+              },
+            }
+          end
+          for _, item in ipairs(forFavor) do add(item) end
+          if #other > 0 then
+            local sub, subFolded = groupHeader("rewards", "other", s.key,
+              "Not for Merchant's Favor", true, GREY, ("(%d)"):format(#other))
+            sub.indent = 16
+            entries[#entries + 1] = sub
+            if not subFolded then
+              for _, item in ipairs(other) do add(item) end
+            end
           end
         end
       end
     end
+    if term and #entries == 0 then entries[1] = noMatch(term) end
     local note = ("%d quartermaster%s seen. Open another's shop to add it.")
       :format(#shops, #shops == 1 and "" or "s")
     return entries, REWARD_COLUMNS, note, headings
@@ -1836,6 +1932,55 @@ function refresh()
   else
     sortBar:Hide()
   end
+
+  -- The search box, left of the sort buttons (at the right without them), with the text
+  -- this page was last searched for.
+  local search = window.search
+  if page.search then
+    local text = searches[key] or ""
+    if search:GetText() ~= text then search:SetText(text) end
+    search:ClearAllPoints()
+    search:SetPoint("TOPRIGHT", -(40 + (page.sorts and (#page.sorts * 104 + 6) or 0)), -36)
+    search:Show()
+  else
+    search:ClearFocus()
+    search:Hide()
+  end
+end
+
+--- The search box above the writs, crates, turn-ins and rewards pages. Each keystroke
+--- redraws the page with what matches; the cross clears it.
+local function buildSearch()
+  local box = CreateFrame("EditBox", nil, window, "InputBoxTemplate")
+  box:SetSize(160, 20)
+  box:SetAutoFocus(false)
+  box:SetMaxLetters(40)
+  box:SetTextInsets(0, 18, 0, 0)
+  box.hint = box:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+  box.hint:SetPoint("LEFT", 2, 0)
+  box.hint:SetText("Search")
+  box.clear = Skin.Cross(box, 16, 10)
+  box.clear:SetPoint("RIGHT", -2, 0)
+  box.clear:Hide()
+  local function changed(text)
+    searches[ns.db.page] = text ~= "" and text or nil
+    list.scroll:SetVerticalScroll(0)
+    refresh()
+  end
+  box:SetScript("OnTextChanged", function(self, userInput)
+    local text = self:GetText() or ""
+    box.hint:SetShown(text == "")
+    box.clear:SetShown(text ~= "")
+    if userInput then changed(text) end
+  end)
+  box.clear:SetScript("OnClick", function()
+    box:SetText("")
+    box:ClearFocus()
+    changed("")
+  end)
+  box:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
+  box:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+  return box
 end
 
 local function build()
@@ -1963,6 +2108,9 @@ local function build()
     end)
     sortBar.buttons[i] = button
   end
+
+  window.search = buildSearch()
+  window:HookScript("OnHide", function() window.search:ClearFocus() end)
 
   list = makeList(window)
   list.head:SetPoint("TOPLEFT", MENU + 8, -66)

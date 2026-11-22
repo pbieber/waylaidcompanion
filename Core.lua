@@ -70,21 +70,30 @@ function ns.Count(id)
   return GetItemCount and GetItemCount(id) or 0
 end
 
-local function realm()
-  return GetRealmName and GetRealmName() or "?"
-end
+-- A character is saved by its name, "Name Surname" on WoW Forever (UnitName gives the
+-- surname where other clients give the realm). The realm is left out: on WoW Forever it
+-- is a layer ("CAMWOW EU5 Realm 6 PvP"), and a character moves between them.
+local me  -- this character's key, once its surname has been read
 
+--- This character's key: "Name Surname", or the name alone while the surname can't be
+--- read (in combat, say) or the client has none.
 local function character()
-  local name = UnitName and UnitName("player") or "?"
-  return name .. "-" .. realm()
+  if me then return me end
+  local name, surname
+  if UnitName then name, surname = UnitName("player") end
+  name, surname = ns.Readable(name), ns.Readable(surname)
+  if type(name) ~= "string" or name == "" then return "?" end
+  if type(surname) == "string" and surname ~= "" then
+    me = name .. " " .. surname
+    return me
+  end
+  return name
 end
 ns.Character = character
 
---- A saved character key ("Name-Realm") as shown: the name alone on the player's realm.
+--- A saved character key as shown: the first name.
 function ns.CharacterName(key)
-  local name, at = key:match("^(.-)%-(.+)$")
-  if not name then return key end
-  return at == realm() and name or key
+  return key:match("^(%S+)") or key
 end
 
 local bankOpen = false
@@ -138,26 +147,103 @@ function ns.SaveHoldings()
   end
   db.bags[key] = bags
   if bank then db.bank[key] = bank end
-  -- WoW Forever gives the surname where other clients give the realm.
-  local surname = ns.Readable((select(2, UnitName("player"))))
-  if type(surname) == "string" and surname ~= "" then
-    db.surnames = db.surnames or {}
-    db.surnames[key] = surname
-  end
+  -- Saved before its surname was known (by an older version): the same character.
+  local first = ns.CharacterName(key)
+  if first ~= key then ns.AbsorbCharacter(db, first, key) end
 end
 
 --- A character's name as the game writes it to address mail: "Name Surname" on WoW
 --- Forever; nil while its surname is unknown (until it is played with this addon).
 function ns.MailAddress(key)
-  local name = key:match("^(.-)%-") or key
-  local surname = ns.db and ns.db.surnames and ns.db.surnames[key]
-  if surname then return name .. " " .. surname end
+  if key:find(" ", 1, true) then return key end
+end
+
+--- Fold what is saved for one character under key `old` into key `new`: the bags, bank
+--- and mailbox kept from `new` when it has its own (they are newer), the purchases added
+--- up.
+function ns.AbsorbCharacter(db, old, new)
+  if old == new then return end
+  for _, saved in ipairs({ db.bags, db.bank, db.mail }) do
+    if saved[old] ~= nil then
+      if saved[new] == nil then saved[new] = saved[old] end
+      saved[old] = nil
+    end
+  end
+  local from = db.spent[old]
+  if not from then return end
+  local to = db.spent[new] or {}
+  db.spent[new] = to
+  for day, items in pairs(from) do
+    local into = to[day] or {}
+    to[day] = into
+    for id, entry in pairs(items) do
+      local sum = into[id] or { 0, 0 }
+      into[id] = sum
+      sum[1], sum[2] = sum[1] + entry[1], sum[2] + entry[2]
+    end
+  end
+  db.spent[old] = nil
+end
+
+--- Fold the scopes named "<realm>-<side>" in `saved` into "<side>", keeping the newer of
+--- each entry (`newer(a, b)`: whether a is newer than b).
+local function foldSides(saved, newer)
+  local scopes = {}
+  for scope in pairs(saved) do scopes[#scopes + 1] = scope end
+  for _, scope in ipairs(scopes) do
+    local side = type(scope) == "string" and scope:match("%-([^%-]+)$")
+    if side then
+      local into = saved[side] or {}
+      saved[side] = into
+      for k, v in pairs(saved[scope]) do
+        if into[k] == nil or newer(v, into[k]) then into[k] = v end
+      end
+      saved[scope] = nil
+    end
+  end
+end
+
+--- Saved data from before 0.11.0, keyed by realm: characters by "Name-Realm" become
+--- "Name Surname" (the name alone where the surname wasn't seen), prices and scan times
+--- by "Realm-H" become "H", the newest of each realm's kept.
+local function dropRealms(db)
+  local old = {}
+  for _, saved in ipairs({ db.bags, db.bank, db.mail, db.spent, db.surnames or {} }) do
+    for key in pairs(saved) do
+      if type(key) == "string" and key:find("-", 1, true) then old[key] = true end
+    end
+  end
+  for key in pairs(old) do
+    local name = key:match("^(.-)%-")
+    local surname = db.surnames and db.surnames[key]
+    ns.AbsorbCharacter(db, key, surname and (name .. " " .. surname) or name)
+  end
+  db.surnames = nil
+  foldSides(db.prices, function(a, b) return a[2] > b[2] end)
+  foldSides(db.scanTimes, function(a, b) return a > b end)
+end
+
+--- Whether another character the account has saved shares this one's first name (on
+--- another realm, say).
+local function nameShared(key)
+  local db = ns.db
+  if not db then return false end
+  local name = ns.CharacterName(key)
+  for _, source in ipairs({ db.bags or {}, db.bank or {}, db.mail or {} }) do
+    for other in pairs(source) do
+      if other ~= key and ns.CharacterName(other) == name then return true end
+    end
+  end
+  return false
 end
 
 --- A character as the pages show it: first name, or first name and surname with "Show
---- both names" ticked (where the surname is known).
+--- both names" ticked or when another character has the same first name (where the
+--- surname is known).
 function ns.ShownName(key)
-  if ns.db and ns.db.ownerNames == 2 then return ns.MailAddress(key) or ns.CharacterName(key) end
+  if ns.db and (ns.db.ownerNames == 2 or nameShared(key)) then
+    return ns.MailAddress(key) or ns.CharacterName(key)
+  end
   return ns.CharacterName(key)
 end
 
@@ -233,12 +319,12 @@ local function now()
 end
 
 --- The prices this addon's own auction house scans found, for the auction house the
---- player uses (each realm and side has its own): { [item] = { copper, when } }, where
---- copper 0 means nothing was listed.
+--- player uses (each side has its own; WoW Forever's realms are layers): { [item] =
+--- { copper, when } }, where copper 0 means nothing was listed.
 function ns.ScannedPrices()
   local db = ns.db
   if not db then return nil end
-  local scope = realm() .. "-" .. (ns.Side() or "?")
+  local scope = ns.Side() or "?"
   db.prices[scope] = db.prices[scope] or {}
   return db.prices[scope]
 end
@@ -248,7 +334,7 @@ end
 function ns.ScanTimes()
   local db = ns.db
   if not db then return nil end
-  local scope = realm() .. "-" .. (ns.Side() or "?")
+  local scope = ns.Side() or "?"
   db.scanTimes[scope] = db.scanTimes[scope] or {}
   return db.scanTimes[scope]
 end
@@ -813,8 +899,8 @@ events:SetScript("OnEvent", function(_, event, arg1)
     db.favor = nil
     db.mail = db.mail or {}
     db.anySide = db.anySide or {}
-    -- Per character ("Name-Realm"): the tracked items in the bags, and in the bank as it
-    -- was when last open. Prices are per auction house ("Realm-A" / "Realm-H").
+    -- Per character ("Name Surname"): the tracked items in the bags, and in the bank as it
+    -- was when last open. Prices are per auction house ("A" / "H").
     db.bags = db.bags or {}
     db.bank = db.bank or {}
     db.prices = db.prices or {}
@@ -823,11 +909,10 @@ events:SetScript("OnEvent", function(_, event, arg1)
     db.collapsed = db.collapsed or {}
     -- The order a page's columns were dragged into, by page: { [page] = { 3, 1, 2, ... } }.
     db.columns = db.columns or {}
-    -- Each character's surname, by "Name-Realm": WoW Forever mail goes to "Name Surname".
-    db.surnames = db.surnames or {}
     -- What each character spent at the auction house on writs, crates and their
-    -- materials, by day (Spent.lua): { ["Name-Realm"] = { ["2026-11-16"] = { [item] = { count, copper } } } }.
+    -- materials, by day (Spent.lua): { ["Name Surname"] = { ["2026-11-16"] = { [item] = { count, copper } } } }.
     db.spent = db.spent or {}
+    dropRealms(db)
     ns.db = db
     for _, fn in ipairs(loaded) do fn() end
     return

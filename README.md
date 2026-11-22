@@ -20,7 +20,7 @@ A writ's or crate's own tooltip, wherever the game shows it (bags, auction house
 
 The world map markers also show on [OpenMap](https://www.curseforge.com/wow/addons/openmap)'s map, sized with its zoom and its own icon size.
 
-Click a group header to fold it. On the writs, crates and turn-ins pages, the **Cost** button at the bottom right switches between the cost per rep (or favor) and the absolute cost. Shift-click an item to link it in chat.
+The writs, crates, turn-ins and rewards pages have a **Search** box beside their sort buttons: type part of a name (a writ, crate, material, profession, recipient, zone, quartermaster or reward) to keep only what matches. Click a group header to fold it. On the writs, crates and turn-ins pages, the **Cost** button at the bottom right switches between the cost per rep (or favor) and the absolute cost. Shift-click an item to link it in chat.
 
 The addon also notes what each character spends at the auction house on writs, crates and their materials, for a later version to show. It stays in your saved variables and is not part of `/pwc export`.
 
@@ -30,7 +30,7 @@ Prices come from the addon's own auction house scan and from [Auctionator](https
 
 On any list, drag a column's heading onto another to move the column there; each page remembers its order, and **Reset order** under Options puts them back. The writs page shows the reputation at the end of the row.
 
-To scan, open the auction house, then press **Scan AH** under a list. Under the writs list (and the turn-ins, which share it) it searches every writ and every material a writ asks for; under the crates list every crate and what fills it. It searches for words several items share ("Leather" finds every leather at once), and only items no shared word catches get a search of their own, with a progress bar beside the button. `/pwc scan` searches both lists' items. Closing the auction house stops the scan and keeps what it found. Prices are kept per realm and side. Each bar's **Last scan** is when a scan of its own list last ran to the end; a scan of the other list doesn't count, though the two share materials.
+To scan, open the auction house, then press **Scan AH** under a list. Under the writs list (and the turn-ins, which share it) it searches every writ and every material a writ asks for; under the crates list every crate and what fills it. It searches for words several items share ("Leather" finds every leather at once), and only items no shared word catches get a search of their own, with a progress bar beside the button. `/pwc scan` searches both lists' items. Closing the auction house stops the scan and keeps what it found. Prices are kept per side (Alliance or Horde), whichever realm layer you are on. Each bar's **Last scan** is when a scan of its own list last ran to the end; a scan of the other list doesn't count, though the two share materials.
 
 In the Cost / 100 rep column:
 
@@ -49,9 +49,9 @@ To add a string someone shared, type `/pwc import`, paste it with Ctrl+V and pre
 
 ## Buying at the auction house
 
-With the auction house open, click a writ's or a crate's row, or a writ recipient or a zone on the Turn-ins page. The buy window shows each item under **Paying** *price* **for:**. Nothing is bought without a click.
+With the auction house open, click a writ's or a crate's row, or a writ recipient or a zone on the Turn-ins page. The buy window shows each item under **Paying** *price* **for:**. Nothing is bought without a click. If a scan is running, a popup asks whether to stop it and buy.
 
-1. **Writ or crate.** Type an amount, or **Max** for all listed. Cheapest first; one click per writ.
+1. **Writ or crate.** Type an amount, or **Max** for all listed. Cheapest first; one click per writ. It shows how many are listed and how many of those at the scanned price, then how much of the material is listed at the scanned price and how many writs or crates that fills.
 2. **Material.** Your writs or crates (in bags plus bought) times what each asks for, minus what your bags hold. For a crate it's the crate's cheapest material, and crates that other materials in your bags already fill need none.
 
 A writ recipient: one of each of their writs that you haven't handed in today and don't hold, then the material for those and the ones in your bags, minus what your bags hold. Material for a writ you skip isn't bought. A zone: the same for every recipient in it, their material bought together.

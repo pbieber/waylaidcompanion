@@ -402,8 +402,9 @@ local function materialFor(leads)
   return math.max(0, (buy.leadHeld + leads - (buy.otherFills or 0)) * buy.count - buy.materialHeld)
 end
 
---- On a writ's or crate's step, from its listings and its material's: how many of them,
---- with the material they need, are listed near the prices the pages showed (`sets`);
+--- On a writ's or crate's step, from its listings and its material's: how many of them
+--- are listed near the price the pages showed (`leadsNear`); how much of the material is
+--- (`matNear`) and how many writs or crates that and the bags fill (`byMaterial`);
 --- whether `want` of them needs more material than is listed near its price (`short`);
 --- and what they would cost over those prices (`extra`), with `need` material of which
 --- `matListed` are listed. nil while the material's listings are unknown.
@@ -421,7 +422,9 @@ local function materialCheck(s, want, p)
   local m = planList(list, need)
   local expected = p.quantity * leadExpect + m.quantity * (matExpect or 0)
   return {
-    sets = math.max(0, math.min(leadsNear, byMaterial)),
+    leadsNear = leadsNear,
+    matNear = matNear,
+    byMaterial = math.max(0, byMaterial),
     short = need > matNear,
     extra = p.price + m.price - expected,
     need = need,
@@ -466,10 +469,15 @@ function offer()
   local notes = {}
   local check = s.lead and materialCheck(s, want, p)
   if check then
-    notes[#notes + 1] = ns.Color(GREY, ("Listed: %d, %d with material at the scanned price. In bags: %d."):format(
-      s.listed, check.sets, buy.leadHeld))
+    local matName = buy.matStep.name
+    notes[#notes + 1] = ns.Color(GREY, ("%d listed, %d at the scanned price."):format(
+      s.listed, check.leadsNear))
+    notes[#notes + 1] = ns.Color(GREY, ("%d %s at the scanned price (enough for %d %s)."):format(
+      check.matNear, matName, check.byMaterial, noun(check.byMaterial)))
+    if buy.leadHeld > 0 then
+      notes[#notes + 1] = ns.Color(GREY, ("In bags: %d %s."):format(buy.leadHeld, noun(buy.leadHeld)))
+    end
     if check.short and want > 0 then
-      local matName = buy.matStep.name
       local warn = check.matListed < check.need
         and ("Not enough %s: %d listed, %d needed."):format(matName, check.matListed, check.need)
         or ("Not enough %s near the scanned price."):format(matName)
@@ -479,7 +487,7 @@ function offer()
       notes[#notes + 1] = ns.Color(RED, warn)
     end
   elseif s.lead then
-    notes[#notes + 1] = ns.Color(GREY, ("Listed: %d. In bags: %d."):format(s.listed, buy.leadHeld))
+    notes[#notes + 1] = ns.Color(GREY, ("%d listed. In bags: %d."):format(s.listed, buy.leadHeld))
   elseif p.quantity < want then
     notes[#notes + 1] = ns.Color(RED, ("Only %d listed."):format(p.quantity))
   end
@@ -1080,8 +1088,49 @@ local function makeDialog()
   dialog:SetScript("OnHide", function() if buy then finish(nil) end end)
 end
 
---- Whether buying can start now; says why not.
-local function canStart()
+-- Asked when a buy is clicked while a scan runs: stop the scan and buy, or keep scanning.
+-- The addon's own small window, not the game's StaticPopup: those frames are shared with
+-- the game's protected popups, and an addon's entry there can taint them.
+local confirm
+
+--- Ask whether to stop the scan and buy `what`; `again` starts the buy. Its button is a
+--- click, as a purchase needs.
+local function askStopScan(what, again)
+  if not confirm then
+    local Skin = ns.Skin
+    confirm = Skin.Window("PuggerWaylaidCompanionStopScan", UIParent, 340, 124, "Scan running")
+    confirm:SetPoint("CENTER", 0, 160)
+    confirm:SetToplevel(true)
+    confirm:SetFrameStrata("FULLSCREEN_DIALOG")
+    confirm:EnableMouse(true)
+    confirm:SetClampedToScreen(true)
+    confirm:Hide()
+    tinsert(UISpecialFrames, "PuggerWaylaidCompanionStopScan")
+    confirm.text = confirm:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    confirm.text:SetPoint("TOPLEFT", 16, -42)
+    confirm.text:SetPoint("TOPRIGHT", -16, -42)
+    confirm.text:SetJustifyH("CENTER")
+    confirm.stop = Skin.Button(confirm, "Stop and buy", 140, 22)
+    confirm.stop:SetPoint("BOTTOMLEFT", 16, 14)
+    confirm.stop:SetScript("OnClick", function()
+      local go = confirm.again
+      confirm:Hide()
+      if ns.StopScan then ns.StopScan() end
+      if go then go() end
+    end)
+    confirm.keep = Skin.Button(confirm, "Keep scanning", 140, 22)
+    confirm.keep:SetPoint("BOTTOMRIGHT", -16, 14)
+    confirm.keep:SetScript("OnClick", function() confirm:Hide() end)
+    confirm:SetScript("OnHide", function() confirm.again = nil end)
+  end
+  confirm.text:SetText(("The AH scan is still running.\nStop it to buy %s?"):format(what))
+  confirm.again = again
+  confirm:Show()
+end
+
+--- Whether buying can start now; says why not. While a scan runs, asks whether to stop it
+--- and buy `what` (`again` starts the buy once it has stopped).
+local function canStart(what, again)
   if not CAN then
     print(ns.TITLE .. ": no AH buying on this client.")
     return false
@@ -1091,7 +1140,11 @@ local function canStart()
     return false
   end
   if ns.ScanProgress().running then
-    print(ns.TITLE .. ": stop the scan.")
+    if again then
+      askStopScan(what or "this", again)
+    else
+      print(ns.TITLE .. ": stop the scan.")
+    end
     return false
   end
   if buy then finish(nil) end
@@ -1100,7 +1153,7 @@ end
 
 --- Buy a list of materials, one step each: { { id, need, name }, ... }.
 function ns.BuyMaterials(list)
-  if not canStart() then return end
+  if not canStart("the missing material", function() ns.BuyMaterials(list) end) then return end
   local steps = {}
   for _, m in ipairs(list) do
     local name, icon = ns.Item(m.id, m.name)
@@ -1117,7 +1170,7 @@ end
 --- less what the bags hold (writs asking for the same material share it, across
 --- recipients too). `title` heads the window.
 function ns.BuyForStops(stops, title)
-  if not canStart() then return end
+  if not canStart("for " .. title, function() ns.BuyForStops(stops, title) end) then return end
   local writs = {}
   for _, stop in ipairs(stops) do
     for _, writ in ipairs(stop.writs) do writs[#writs + 1] = writ end
@@ -1165,7 +1218,8 @@ end
 --- other material in the bags fills already; gain { label, each }: the reputation or favor
 --- one lead gives, nil when unknown.
 local function buyWithMaterial(title, word, lead, material, otherFills, gain)
-  if not canStart() then return end
+  local function again() buyWithMaterial(title, word, lead, material, otherFills, gain) end
+  if not canStart(word == "writ" and ("the " .. title .. " writ") or title, again) then return end
   local held = ns.Count(lead.id)
   local leadName, leadIcon = ns.Item(lead.id, lead.name)
   local matName, matIcon = ns.Item(material.id, material.name)
