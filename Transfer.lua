@@ -162,21 +162,23 @@ local function writKinds()
   return out
 end
 
---- The zone a kind of writ is handed in, for the player's side: the kind's zone, or
---- UNKNOWN_ZONE when no turn-in is known for it.
+--- The zone each kind of writ is handed in, for the player's side, by writ item: the
+--- player's side's turn-in zone, else the other side's, else UNKNOWN_ZONE.
 local UNKNOWN_ZONE = "?"
-local function kindZone(kind)
-  local other
+local function kindZones()
+  local mine, other = {}, {}
   for _, writ in ipairs(ns.writs) do
-    if writ.writItem == kind.writItem then
-      local npc = ns.WritNpc(writ)
-      if npc then
-        if ns.ForPlayer(writ) then return npc.zone end
-        other = other or npc.zone
-      end
+    local npc = ns.WritNpc(writ)
+    if npc then
+      local into = ns.ForPlayer(writ) and mine or other
+      into[writ.writItem] = into[writ.writItem] or npc.zone
     end
   end
-  return other or UNKNOWN_ZONE
+  return setmetatable({}, { __index = function(t, id)
+    local zone = mine[id] or other[id] or UNKNOWN_ZONE
+    rawset(t, id, zone)
+    return zone
+  end })
 end
 
 local function itemName(id, fallback)
@@ -415,12 +417,13 @@ local window
 --- take(id, count) the attachments `count` takes, one per stack used, largest first (the
 --- way the mover takes them).
 local function bagPool()
-  local pool = {}  -- itemID -> stack counts left
+  local pool = {}  -- itemID -> stack counts left, read from the bags once
+  for _, s in ipairs(slots("bags")) do
+    pool[s.id] = pool[s.id] or {}
+    table.insert(pool[s.id], s.count)
+  end
   local function stackList(id)
-    if not pool[id] then
-      pool[id] = {}
-      for _, s in ipairs(stacks("bags", id)) do pool[id][#pool[id] + 1] = s.count end
-    end
+    pool[id] = pool[id] or {}
     return pool[id]
   end
   local function total(id)
@@ -472,11 +475,12 @@ end
 --- Sets in the bags (one per writ, when there is material enough for it), packed into
 --- mails (see pack). With `zone`, only the writs handed in there (UNKNOWN_ZONE: those
 --- with no known turn-in); the others leave their material for these.
-function ns.PlanMail(zone)
+function ns.PlanMail(zone, zones)
   local total, take = bagPool()
+  zones = zone and (zones or kindZones())
   local groups = {}
   for _, writ in ipairs(writKinds()) do
-    if (not zone or kindZone(writ) == zone)
+    if (not zone or zones[writ.writItem] == zone)
       and total(writ.writItem) >= 1 and total(writ.item) >= writ.count then
       local pieces = {}
       attach(take, pieces, writ.writItem, 1, true)
@@ -559,16 +563,16 @@ end
 --- it: { { zone, sets }, ... } by name, the unknown last. The chosen zone is listed even
 --- when the bags hold none for it.
 function ns.MailZones()
-  local bags, seen, out = counts("bags"), {}, {}
+  local bags, seen, out, zones = counts("bags"), {}, {}, kindZones()
   local function add(zone)
     if seen[zone] then return end
     seen[zone] = true
     local sets = 0
-    for _, m in ipairs(ns.PlanMail(zone)) do sets = sets + #m.sets end
+    for _, m in ipairs(ns.PlanMail(zone, zones)) do sets = sets + #m.sets end
     out[#out + 1] = { zone = zone, sets = sets }
   end
   for _, writ in ipairs(writKinds()) do
-    if (bags[writ.writItem] or 0) > 0 then add(kindZone(writ)) end
+    if (bags[writ.writItem] or 0) > 0 then add(zones[writ.writItem]) end
   end
   if mailZone() then add(mailZone()) end
   table.sort(out, function(a, b)
@@ -896,6 +900,8 @@ function ns.BuildTransfer(parent, width)
     l:SetPoint("TOPLEFT", 10, top)
     l:SetPoint("RIGHT", f, "RIGHT", -10, 0)
     l:SetJustifyH("LEFT")
+    l:SetWordWrap(true)
+    l.wide = true
     return l
   end
   local function button(text, w, onClick)
@@ -990,9 +996,11 @@ function ns.BuildTransfer(parent, width)
   f.buy = button("Buy missing material", BUTTON_W, ns.BuyMissing)
   f.buyNote = line(0, "GameFontDisableSmall")
 
+  -- A line keeps its right edge, so a long one wraps inside the page.
   local function place(region, top, left)
     region:ClearAllPoints()
     region:SetPoint("TOPLEFT", left or 10, top)
+    if region.wide then region:SetPoint("RIGHT", f, "RIGHT", -10, 0) end
   end
 
   -- The zone button says the choice and its sets; its list, when open, has All zones and

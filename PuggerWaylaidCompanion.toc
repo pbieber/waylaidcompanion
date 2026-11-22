@@ -20,6 +20,7 @@ Buy.lua
 Spent.lua
 Craft.lua
 Transfer.lua
+Wishlist.lua
 Rewards.lua
 Share.lua
 Overview.lua

@@ -117,7 +117,7 @@ function ns.Holdings(id)
 end
 
 -- The items whose count is kept for every character: the writs and what they ask for,
--- and the crates.
+-- and the crates and their materials (the wishlist counts them on any character).
 local tracked
 local function trackedItems()
   if not tracked then
@@ -125,7 +125,10 @@ local function trackedItems()
     for _, writ in ipairs(ns.writs) do
       tracked[writ.writItem], tracked[writ.item] = true, true
     end
-    for _, crate in ipairs(ns.crates) do tracked[crate.item] = true end
+    for _, crate in ipairs(ns.crates) do
+      tracked[crate.item] = true
+      for _, bundle in ipairs(crate.bundles) do tracked[bundle.item] = true end
+    end
   end
   return tracked
 end
@@ -285,9 +288,19 @@ function ns.AccountHoldings(id)
 end
 
 local mailOpen = false
+--- Whether two { [item] = count } tables hold the same.
+local function sameCounts(a, b)
+  if not a or not b then return a == b end
+  for id, n in pairs(a) do if b[id] ~= n then return false end end
+  for id in pairs(b) do if a[id] == nil then return false end end
+  return true
+end
+
 --- Note what the open mailbox holds, per item. Only the mails the game lists are counted.
+--- Whether that changed: the game sends the inbox update many times a second while the
+--- mailbox is open, and redrawing the pages each time stalls the game.
 local function scanMail()
-  if not mailOpen or not ns.db or not GetInboxNumItems or not GetInboxItem then return end
+  if not mailOpen or not ns.db or not GetInboxNumItems or not GetInboxItem then return false end
   local held = {}
   for index = 1, GetInboxNumItems() or 0 do
     for slot = 1, ATTACHMENTS_MAX_RECEIVE or 16 do
@@ -299,7 +312,10 @@ local function scanMail()
       if id then held[id] = (held[id] or 0) + (tonumber(count) or 1) end
     end
   end
-  ns.db.mail[character()] = held
+  local key = character()
+  if sameCounts(ns.db.mail[key], held) then return false end
+  ns.db.mail[key] = held
+  return true
 end
 
 -- ---------------------------------------------------------------------------
@@ -839,7 +855,7 @@ end
 local DEFAULTS = { page = "overview", writSort = "level", crateSort = "level", turninSort = "name", pins = true, ownerNames = 1,
   pinSize = 1, pinZoom = true,
   writCost = "per", crateCost = "per", repScale = 100, favorScale = 1, crateRefund = true, writPouch = true,
-  itemColor = "tier",
+  itemColor = "tier", wishClick = "right", turninRows = "npc",
   theme = "modern", mailWhat = "writs" }
 
 local listeners = {}
@@ -927,7 +943,7 @@ events:SetScript("OnEvent", function(_, event, arg1)
     bankOpen = false
     return
   end
-  if event == "MAIL_INBOX_UPDATE" then scanMail() end
+  if event == "MAIL_INBOX_UPDATE" and not scanMail() then return end
   if QUEST_EVENTS[event] and ns.LocateSoon then ns.LocateSoon() end
   if event == "QUEST_TURNED_IN" and ns.Learn then ns.Learn(arg1) end
   ns.Changed()

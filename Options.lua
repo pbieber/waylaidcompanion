@@ -10,6 +10,9 @@ The Options page: how the writs and crates pages show cost, and how characters a
   - World map: the turn-in markers' size (a slider, 25 to 200%, with a marker drawn at
     that size beside it; on OpenMap's map times its Icon size), whether they show (the same setting as the minimap button's right-click), and
     whether they grow as the map zooms in.
+  - Turn-ins: the page lists each zone's NPCs, or its writs with the NPC beside each.
+  - Wishlist: whether a right-click adds to it, or only a shift-right-click; whether what
+    the target lacks glows in the bags, bank and mailbox.
   - Tooltips: what is added to a writ's and a crate's tooltip (Tooltips.lua), each kind on
     or off, and each line.
   - Characters: "Show both names" (first name and surname) in the Owned columns.
@@ -273,6 +276,25 @@ function ns.BuildOptions(parent, width)
   end, 2 * (BUTTON_W + 4))
   note("The size of the markers for writ turn-ins and the crate camp on the world map, "
     .. "zoomed out. On OpenMap's map, also times its own Icon size.", top - 28 - 2 * ROW)
+
+  top = top - 28 - 2 * ROW - 34
+  heading("Turn-ins", top)
+  choice("List", top - 28, "turninRows", { { "npc", "NPCs" }, { "writ", "Writs" } })
+  note("NPCs: each zone lists the NPCs that take writs, their writs on hover. Writs: each zone "
+    .. "lists its writs, with the NPC that takes each.", top - 28 - ROW)
+
+  top = top - 28 - ROW - 46
+  heading("Wishlist", top)
+  choice("Add with", top - 28, "wishClick", { { "right", "Right-click" }, { "shift", "Shift-right-click" } })
+  checkbox(top - 28 - ROW, "wishGlow", "Glow in bags, bank and mail", function()
+    GameTooltip:SetText("Wishlist glow", 1, 0.82, 0)
+    GameTooltip:AddLine("While another character is the wishlist's target, the writs, crates and "
+      .. "materials it still lacks glow green in your bags, bank and mailbox, to mail over.", 1, 1, 1, true)
+    GameTooltip:AddLine(" ")
+    GameTooltip:AddLine("The game's own bag, bank and mail windows only.", 0.8, 0.8, 0.8, true)
+  end)
+  note("How a writ, crate, material, NPC or zone is added to the wishlist, and taken off it "
+    .. "on the Wishlist page.", top - 28 - 2 * ROW)
 
   top = top - 28 - 2 * ROW - 34
   heading("Tooltips", top)

@@ -6,6 +6,7 @@ The window: a menu down the left, a page on the right.
   Waylaid Crates     - every crate and its material, by tier, profession or cost
   Fastcraft          - the crates in the bags and what in the bags fills them
   Turn-ins           - where writs and crates go, by zone, and what a zone's writs cost
+  Wishlist           - writs, crates and materials wanted on one character (Wishlist.lua)
   Rewards            - the quartermaster's items (Rewards.lua)
   Transfer           - mail, bank and buying (Transfer.lua)
   Options            - how costs and characters are shown (Options.lua), at the menu's foot
@@ -14,6 +15,9 @@ Each list page builds plain entries ({ header = ... } or { cells = {...} }) and 
 to one shared list, which draws them with pooled rows.
 The writs, crates, turn-ins and rewards pages have a search box beside their sort buttons:
 it keeps the rows whose names match, and opens every group while it holds text.
+A right-click on a writ, a crate or its material, a turn-in NPC or a zone adds it to the
+wishlist (an entry's rightClick, named in its tooltip by rightClickTip); with the option
+set, only a shift-right-click does.
 ]]
 
 local ADDON, ns = ...
@@ -41,6 +45,12 @@ local function showTooltip(row)
   -- A tip can be worked out at the hover, when it depends on where the player is.
   local tip = entry.tip
   if type(tip) == "function" then tip = tip() end
+  if entry.rightClick then
+    local line = entry.rightClickTip or "Right-click: add to the wishlist."
+    if ns.db.wishClick == "shift" then line = line:gsub("^Right%-click", "Shift-right-click") end
+    line = ns.Color(GREY, line)
+    tip = tip and (tip .. "\n" .. line) or line
+  end
   if entry.item then
     GameTooltip:SetOwner(row, "ANCHOR_RIGHT")
     if GameTooltip.SetItemByID then
@@ -131,7 +141,19 @@ local function makeRow(parent)
   end
   row:SetScript("OnEnter", showTooltip)
   row:SetScript("OnLeave", function() GameTooltip:Hide() end)
-  row:SetScript("OnClick", function(self)
+  row:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+  row:SetScript("OnClick", function(self, button)
+    if button == "RightButton" then
+      -- The wishlist's click: a right-click, or with the option a shift-right-click only.
+      local shifted = IsShiftKeyDown and IsShiftKeyDown()
+      if ns.db.wishClick == "shift" and not shifted then return end
+      if self.entry and self.entry.rightClick then
+        self.entry.rightClick()
+        -- Flashed green, as a row the scan found cheaper, to show it went on the list.
+        if self.entry.key then list:Flash(self.entry.key) end
+      end
+      return
+    end
     if itemClick(self.entry) then return end
     if self.entry and self.entry.click then self.entry.click() end
   end)
@@ -239,6 +261,12 @@ local function makeList(parent)
     end
     if not any then self:Hide() end
   end)
+
+  --- Flash an entry's row green (it fades out as a scan's flash does).
+  function l:Flash(key)
+    self.flashes[key] = { CHEAPER[1], CHEAPER[2], CHEAPER[3], GetTime() }
+    self.flasher:Show()
+  end
 
   --- Dim a row while the scan has yet to reach its items; once it has, flash it when what
   --- the row costs moved. The value from before the scan is kept until the row is done,
@@ -514,7 +542,7 @@ local function makeList(parent)
         self:Track(row, entry)
       end
       if not (entry.key and self.flashes[entry.key]) then row.flash:Hide() end
-      row:EnableMouse(not entry.header or entry.click ~= nil)
+      row:EnableMouse(not entry.header or entry.click ~= nil or entry.rightClick ~= nil)
       row:Show()
     end
     for i = #entries + 1, #self.rows do self.rows[i]:Hide() end
@@ -797,6 +825,7 @@ local function writEntry(writ, sort, cost)
         ns.OpenMap(npc.map)
       end
     end,
+    rightClick = function() ns.WishWrits({ writ }) end,
   }
 end
 
@@ -1126,6 +1155,8 @@ pages.crates = {
           click = function()
             if ns.AuctionHouseOpen() and ns.CanBuy() then ns.BuyForCrate(crate) end
           end,
+          rightClick = function() ns.WishCrate(crate) end,
+          rightClickTip = "Right-click: add to the wishlist, with its cheapest material.",
           lines = function()
             local lines = { { " " } }
             local now = ns.CrateCost(crate)
@@ -1192,6 +1223,8 @@ pages.crates = {
                 ns.Craft(crate, bundle)
               end
             end,
+            rightClick = function() ns.WishCrate(crate, bundle) end,
+            rightClickTip = "Right-click: add the crate and this material to the wishlist.",
             lines = function()
               local lines = { { " " } }
               local now = ns.CrateCost(crate)
@@ -1302,6 +1335,8 @@ pages.fastcraft = {
 
 -- NPC, location, today, cost.
 local STOP_COLUMNS = { 0, 290, 380, 520, 710 }
+-- Listing writs (Options): writ, NPC, today, cost.
+local TURNIN_WRIT_COLUMNS = { 0, 280, 470, 550, 710 }
 
 --- What a group of writs costs, writ and material, shaped like a writ's cost so the
 --- writs page's Cost column shows it: { net, perRep (over all their reputation),
@@ -1362,6 +1397,7 @@ pages.turnins = {
     -- first among equals), the zones within their continent and the recipients within
     -- their zone.
     local byCost, byRep = ns.db.turninSort == "cost", ns.db.turninSort == "rep"
+    local byWrit = ns.db.turninRows == "writ"
     local zones, byKey = {}, {}
     for _, stop in ipairs(ns.Stops()) do
       stop.continent = ns.Continent(stop.npc.map)
@@ -1459,54 +1495,105 @@ pages.turnins = {
           click = function()
             if ns.AuctionHouseOpen() and ns.CanBuy() and zone.open > 0 then ns.BuyForStops(zone.stops, zone.name) end
           end,
+          rightClick = function() ns.WishWrits(zone.writs, zone.name) end,
+          rightClickTip = "Right-click: add the zone's writs and their material to the wishlist.",
         }
-        for _, stop in ipairs(stops) do
-          local npc = stop.npc
-          local names = {}
-          for _, writ in ipairs(stop.writs) do
-            local state = ns.WritState(writ)
-            local value = state ~= "done" and writValue(ns.WritCost(writ))
-            names[#names + 1] = ns.Color(ns.WRIT_COLOR[writ.tier], writ.name)
-              .. (state == "done" and ns.Color(GREY, " (done)") or "")
-              .. (value and ("  " .. ns.SignedCoins(value)) or "")
-          end
-          local status
-          if stop.open == 0 then
-            status = ns.Color(GREY, "Done")
-          elseif stop.held > 0 then
-            status = ns.Color(GREEN, ("%d in bags"):format(stop.held))
-          else
-            status = ("%d of %d open"):format(stop.open, #stop.writs)
-          end
-          local stopCost = stop.cost
-          local tip = npc.name .. "\n" .. table.concat(names, "\n")
-          entries[#entries + 1] = {
-            icon = "Interface/Icons/INV_Misc_Note_01",
-            indent = 16,
-            flat = true,
-            key = "npc:" .. npc.id,
-            scan = writItems(stop.writs),
-            value = not stopCost.done and writValue(stopCost) or nil,
-            tip = function()
-              if ns.AuctionHouseOpen() and ns.CanBuy() then
-                return tip .. "\n|cff40d040Click: buy the writs open today and their material.|r"
+        if byWrit then
+          -- Each writ the shown NPCs take, with its NPC: the zone's sort, then by name.
+          -- Searched, a writ shows when the zone, its NPC or the writ matches.
+          local zoneHit = not term or matches(term, zone.name, zone.continent)
+          local rows = {}
+          for _, stop in ipairs(stops) do
+            local npcHit = zoneHit or matches(term, stop.npc.name)
+            for _, writ in ipairs(stop.writs) do
+              if npcHit or matches(term, writ.name, ns.Item(writ.item, writ.name), writ.profession) then
+                rows[#rows + 1] = { writ = writ, npc = stop.npc, cost = writsCost({ writ }) }
               end
-              return tip .. "\nClick: map."
-            end,
-            cells = { npc.name, ("%.1f, %.1f"):format(npc.x, npc.y), status,
-              stopCost.done and "" or costText(stopCost) },
-            -- At the auction house: buy this recipient's writs and material (Buy.lua).
-            click = function()
-              if ns.AuctionHouseOpen() and ns.CanBuy() then ns.BuyForStop(stop) else ns.OpenMap(npc.map) end
-            end,
-          }
+            end
+          end
+          table.sort(rows, function(x, y)
+            if order then
+              local first = order(x.cost, y.cost)
+              if first ~= nil then return first end
+            end
+            if x.writ.name ~= y.writ.name then return x.writ.name < y.writ.name end
+            return x.npc.name < y.npc.name
+          end)
+          for _, row in ipairs(rows) do
+            local writ, npc = row.writ, row.npc
+            -- The writs page's row (its tooltip, click and right-click), in this page's columns.
+            local e = writEntry(writ, "level", ns.WritCost(writ))
+            local state = ns.WritState(writ)
+            e.indent, e.flat = 16, true
+            e.cells = {
+              e.cells[1],
+              npc.name,
+              state == "open" and "Open" or STATE_TEXT[state],
+              row.cost.done and "" or costText(row.cost),
+            }
+            entries[#entries + 1] = e
+          end
+        else
+          for _, stop in ipairs(stops) do
+            local npc = stop.npc
+            local names = {}
+            for _, writ in ipairs(stop.writs) do
+              local state = ns.WritState(writ)
+              local value = state ~= "done" and writValue(ns.WritCost(writ))
+              names[#names + 1] = ns.Color(ns.WRIT_COLOR[writ.tier], writ.name)
+                .. (state == "done" and ns.Color(GREY, " (done)") or "")
+                .. (value and ("  " .. ns.SignedCoins(value)) or "")
+            end
+            local status
+            if stop.open == 0 then
+              status = ns.Color(GREY, "Done")
+            elseif stop.held > 0 then
+              -- Of the writs open today: green when the bags hold them all, yellow while
+              -- some are still missing.
+              status = ns.Color(stop.held >= stop.open and GREEN or GOLD,
+                ("%d of %d in bags"):format(stop.held, stop.open))
+            else
+              status = ("%d of %d open"):format(stop.open, #stop.writs)
+            end
+            local stopCost = stop.cost
+            local tip = npc.name .. "\n" .. table.concat(names, "\n")
+            entries[#entries + 1] = {
+              icon = "Interface/Icons/INV_Misc_Note_01",
+              indent = 16,
+              flat = true,
+              key = "npc:" .. npc.id,
+              scan = writItems(stop.writs),
+              value = not stopCost.done and writValue(stopCost) or nil,
+              tip = function()
+                if ns.AuctionHouseOpen() and ns.CanBuy() then
+                  return tip .. "\n|cff40d040Click: buy the writs open today and their material.|r"
+                end
+                return tip .. "\nClick: map."
+              end,
+              cells = { npc.name, ("%.1f, %.1f"):format(npc.x, npc.y), status,
+                stopCost.done and "" or costText(stopCost) },
+              -- At the auction house: buy this recipient's writs and material (Buy.lua).
+              click = function()
+                if ns.AuctionHouseOpen() and ns.CanBuy() then ns.BuyForStop(stop) else ns.OpenMap(npc.map) end
+              end,
+              rightClick = function() ns.WishWrits(stop.writs, npc.name) end,
+              rightClickTip = "Right-click: add these writs and their material to the wishlist.",
+            }
+          end
         end
       end
     end
     if term and #entries == 0 then entries[1] = noMatch(term) end
     local known, total = ns.KnownTurnIns()
+    local mapTip = ("On the world map (/pwc map). Known turn-ins: %d of %d."):format(known, total)
+    if byWrit then
+      return entries, TURNIN_WRIT_COLUMNS, nil, {
+        { "Writ", "Each zone's writs (Options: Turn-ins). " .. mapTip }, "NPC", "Today",
+        { writCostHeading(), writCostTip() },
+      }
+    end
     return entries, STOP_COLUMNS, nil, {
-      { "NPC", ("On the world map (/pwc map). Known turn-ins: %d of %d."):format(known, total) },
+      { "NPC", mapTip },
       "Location", "Today",
       { writCostHeading(), "The writs not handed in today.\n" .. writCostTip() },
     }
@@ -1753,12 +1840,116 @@ pages.rewards = {
   end,
 }
 
+-- Item, wanted, bags, bank, mail, missing.
+local WISH_COLUMNS = { 0, 330, 406, 482, 558, 634, 710 }
+local WISH_GROUPS = { { "writ", "Writs" }, { "crate", "Crates" }, { "material", "Materials" } }
+
+pages.wishlist = {
+  title = "Wishlist",
+  target = true,  -- the character picker and Clear at the top right
+  build = function()
+    local target = ns.WishTarget()
+    local wanted = ns.Wishlist()
+    -- What each item on it is: a writ (by its writ item), a crate or a material.
+    local writOf, crateOf, names = {}, {}, {}
+    for _, writ in ipairs(ns.writs) do
+      if not writOf[writ.writItem] or ns.ForPlayer(writ) then writOf[writ.writItem] = writ end
+      names[writ.item] = names[writ.item] or writ.name
+    end
+    for _, crate in ipairs(ns.crates) do
+      crateOf[crate.item] = crate
+      for _, bundle in ipairs(crate.bundles) do names[bundle.item] = names[bundle.item] or bundle.name end
+    end
+    local rows = { writ = {}, crate = {}, material = {} }
+    for id, count in pairs(wanted) do
+      local writ, crate = writOf[id], crateOf[id]
+      local row = { id = id, count = count, writ = writ, crate = crate }
+      if writ then
+        row.kind, row.tier, row.name = "writ", writ.tier, writ.name
+        row.label = ns.Color(ns.WRIT_COLOR[writ.tier], "Writ: " .. writ.name)
+      elseif crate then
+        row.kind, row.tier, row.name = "crate", crate.tier, crate.name
+        row.label = itemColored(id, ns.CRATE_COLOR[crate.tier], "Waylaid Crate: " .. crate.name)
+      else
+        row.kind, row.tier = "material", 0
+        row.name = ns.Item(id, names[id])
+        row.label = itemColored(id, nil, row.name)
+      end
+      table.insert(rows[row.kind], row)
+    end
+    local entries = {}
+    local who = ns.ShownName(target)
+    for _, group in ipairs(WISH_GROUPS) do
+      local items = rows[group[1]]
+      table.sort(items, function(a, b)
+        if a.tier ~= b.tier then return a.tier < b.tier end
+        return a.name < b.name
+      end)
+      if #items > 0 then
+        local head = groupHeader("wishlist", "items", group[1], group[2])
+        entries[#entries + 1] = head
+        local complete = 0
+        for _, row in ipairs(items) do
+          -- Done once the bags and bank hold enough; enough only with the mailbox counted
+          -- is not done yet: Mailbox, in yellow.
+          local held = ns.CharacterHoldings(target, row.id)
+          local missing = math.max(0, row.count - held.total)
+          local done = held.bags + held.bank >= row.count
+          if done then complete = complete + 1 end
+          local _, icon = ns.Item(row.id, row.name)
+          local function count(n) return n > 0 and tostring(n) or ns.Color(GREY, "0") end
+          if not head.folded then
+            local tips = {}
+            if not held.mailSeen then tips[#tips + 1] = who .. "'s mailbox hasn't been opened with the addon yet." end
+            if row.kind == "material" then
+              tips[#tips + 1] = "Comes with a writ or crate: right-click that to take it off."
+            end
+            entries[#entries + 1] = {
+              icon = icon,
+              item = row.id,
+              cells = {
+                row.label,
+                tostring(row.count),
+                count(held.bags),
+                count(held.bank),
+                held.mailSeen and count(held.mail) or ns.Color(GREY, "?"),
+                (done and ns.Color(GREEN, "Done"))
+                  or (missing == 0 and ns.Color(GOLD, "Mailbox"))
+                  or ns.Color(held.total > 0 and GOLD or ORANGE, tostring(missing)),
+              },
+              tip = tips[1] and table.concat(tips, "\n") or nil,
+              -- A writ or crate comes off with its material; a material only with them.
+              rightClick = ns.WishRemovable(row.id) and function() ns.WishRemove(row.id) end or nil,
+              rightClickTip = "Right-click: take it off the wishlist, with its material.",
+            }
+          end
+        end
+        head.right = ("%d / %d done"):format(complete, #items)
+      end
+    end
+    if #entries == 0 then
+      entries[1] = { header = ns.Color(GREY, "Nothing on the wishlist.") }
+      entries[2] = { header = ns.Color(GREY,
+        "Right-click a writ, a crate or its material, a turn-in NPC or a zone to add it.") }
+    end
+    local text = target == ns.Character()
+      and ("For %s, the character you play: bags and bank now, the mailbox as last opened."):format(who)
+      or ("For %s: bags and bank as when last played, the mailbox as last opened there."):format(who)
+    return entries, WISH_COLUMNS, text .. " Right-click a writ or crate to take it off with its material.", {
+      "Item", "Wanted", "Bags", "Bank", "Mail",
+      { "Missing", "Wanted less what the character has in its bags, bank and mailbox.\n"
+        .. "Done: the bags and bank hold enough. Mailbox: enough only with what is in the mailbox." },
+    }
+  end,
+}
+
 pages.overview = { title = "Overview", panel = "overview" }
 pages.transfer = { title = "Transfer", panel = "transfer" }
 pages.options = { title = "Options", panel = "options" }
 
 -- The pages down the menu; Options sits apart at its foot.
-local MENU_ORDER = { "overview", "writs", "crates", "fastcraft", "turnins", "rewards", "transfer", "options" }
+local MENU_ORDER = { "overview", "writs", "crates", "fastcraft", "turnins", "wishlist", "rewards", "transfer",
+  "options" }
 local MENU_ICON = {
   fastcraft = "Interface/Icons/INV_Box_01",
   overview = "Interface/Icons/INV_Misc_Book_09",
@@ -1766,6 +1957,7 @@ local MENU_ICON = {
   crates = "Interface/Icons/INV_Crate_01",
   turnins = "Interface/Icons/INV_Misc_Map_01",
   rewards = "Interface/Icons/INV_Misc_Coin_01",
+  wishlist = "Interface/Icons/INV_Misc_Note_06",
   transfer = "Interface/Icons/INV_Letter_15",
   options = "Interface/Icons/INV_Misc_Gear_01",
 }
@@ -1933,6 +2125,14 @@ function refresh()
     sortBar:Hide()
   end
 
+  -- The wishlist's character picker.
+  if page.target then
+    window.wish:Refresh()
+    window.wish:Show()
+  else
+    window.wish:Hide()
+  end
+
   -- The search box, left of the sort buttons (at the right without them), with the text
   -- this page was last searched for.
   local search = window.search
@@ -1981,6 +2181,68 @@ local function buildSearch()
   box:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
   box:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
   return box
+end
+
+--- The wishlist page's top right: who it is for (a button that opens a list of the
+--- account's characters) and Clear.
+local function buildWishBar()
+  local bar = CreateFrame("Frame", nil, window)
+  bar:SetSize(330, 24)
+  bar:SetPoint("TOPRIGHT", -34, -34)
+  bar.label = bar:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+  bar.label:SetText("For")
+  bar.clear = Skin.Button(bar, "Clear", 70, 22)
+  bar.clear:SetPoint("RIGHT", 0, 0)
+  bar.clear:SetScript("OnClick", function() ns.WishClear() end)
+  bar.who = Skin.Button(bar, "", 200, 22)
+  bar.who:SetPoint("RIGHT", bar.clear, "LEFT", -8, 0)
+  bar.label:SetPoint("RIGHT", bar.who, "LEFT", -6, 0)
+  bar.who.arrow = bar.who:CreateTexture(nil, "OVERLAY")
+  bar.who.arrow:SetTexture("Interface/ChatFrame/ChatFrameExpandArrow")
+  bar.who.arrow:SetSize(12, 12)
+  bar.who.arrow:SetPoint("RIGHT", -6, 0)
+  bar.who.arrow:SetRotation(-math.pi / 2)
+  local menu = CreateFrame("Frame", nil, bar)
+  menu:SetPoint("TOPLEFT", bar.who, "BOTTOMLEFT", 0, -2)
+  menu:SetFrameStrata("DIALOG")
+  menu:EnableMouse(true)
+  local back = Skin.Fill(menu, Skin.color.window, "BACKGROUND")
+  back:SetAllPoints()
+  Skin.Border(menu, Skin.color.choiceEdge, "BORDER")
+  menu:Hide()
+  menu.entries = {}
+  bar.menu = menu
+  bar.who:SetScript("OnClick", function()
+    if menu:IsShown() then menu:Hide() else menu:Show() bar:Refresh() end
+  end)
+  bar:SetScript("OnHide", function() menu:Hide() end)
+
+  function bar:Refresh()
+    local target = ns.WishTarget()
+    local me = ns.Character()
+    self.who:SetText(ns.ShownName(target) .. (target == me and ns.Color(GREY, "  (you)") or ""))
+    if not menu:IsShown() then return end
+    for _, e in ipairs(menu.entries) do e:Hide() end
+    local keys = ns.WishCharacters()
+    for i, key in ipairs(keys) do
+      local e = menu.entries[i]
+      if not e then
+        e = Skin.Choice(menu, 196, 20)
+        menu.entries[i] = e
+      end
+      e:ClearAllPoints()
+      e:SetPoint("TOPLEFT", 2, -2 - (i - 1) * 22)
+      e:SetText((ns.MailAddress(key) or key) .. (key == me and "  (you)" or ""))
+      e:SetActive(key == target)
+      e:SetScript("OnClick", function()
+        menu:Hide()
+        ns.SetWishTarget(key)
+      end)
+      e:Show()
+    end
+    menu:SetSize(200, #keys * 22 + 2)
+  end
+  return bar
 end
 
 local function build()
@@ -2110,6 +2372,8 @@ local function build()
   end
 
   window.search = buildSearch()
+  window.wish = buildWishBar()
+  window.wish:Hide()
   window:HookScript("OnHide", function() window.search:ClearFocus() end)
 
   list = makeList(window)
