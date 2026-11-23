@@ -13,7 +13,7 @@ The window: a menu down the left, a page on the right.
 
 Each list page builds plain entries ({ header = ... } or { cells = {...} }) and hands them
 to one shared list, which draws them with pooled rows.
-The writs, crates, turn-ins and rewards pages have a search box beside their sort buttons:
+The writs, crates, turn-ins, wishlist and rewards pages have a search box at the top right:
 it keeps the rows whose names match, and opens every group while it holds text.
 A right-click on a writ, a crate or its material, a turn-in NPC or a zone adds it to the
 wishlist (an entry's rightClick, named in its tooltip by rightClickTip); with the option
@@ -30,7 +30,7 @@ local WIDTH, HEIGHT, MENU = 920, 640, 170
 local ROW, CELLS, HEAD = 22, 7, 20
 local GREY, GOLD, GREEN, ORANGE = "ff808080", "ffffd100", "ff40d040", "ffff8040"
 
-local window, list, sortBar, note, scanBar, fillBar
+local window, list, sortBar, note, scanBar, fillBar, wishBar
 local panels = {}  -- the pages that aren't lists: overview, transfer
 local refresh
 local pages = {}
@@ -179,6 +179,40 @@ local function columnOrder(key, n, default)
   return order
 end
 
+-- Portrait models load one at a time, in the order the rows asked (top first): asked all
+-- at once, the game finished them bottom to top. Each waits for the one before to load,
+-- or PORTRAIT_WAIT seconds at most.
+local PORTRAIT_WAIT = 0.3
+local portraitQueue, portraitLoading, portraitWaited = {}, nil, 0
+local portraitLoader = CreateFrame("Frame")
+portraitLoader:Hide()
+portraitLoader:SetScript("OnUpdate", function(self, elapsed)
+  if portraitLoading then
+    portraitWaited = portraitWaited + elapsed
+    if not portraitLoading.loaded and portraitWaited < PORTRAIT_WAIT then return end
+    portraitLoading = nil
+  end
+  local model = table.remove(portraitQueue, 1)
+  if not model then
+    self:Hide()
+    return
+  end
+  model.queued = false
+  -- Its row may have gone (wanted false) since it was queued.
+  if model.wanted ~= false and model.creature then
+    model.loaded, portraitLoading, portraitWaited = false, model, 0
+    if model.SetCreature then pcall(model.SetCreature, model, model.creature) end
+    if model.SetPortraitZoom then model:SetPortraitZoom(1) end
+  end
+end)
+
+local function queuePortrait(model)
+  if model.queued then return end  -- already waiting: it loads the creature it has then
+  model.queued = true
+  portraitQueue[#portraitQueue + 1] = model
+  portraitLoader:Show()
+end
+
 --- Show a creature's face on a header row, from its NPC id: a 3D model zoomed to the
 --- head, like the game's own portraits (a flat portrait needs the NPC to be there).
 local function setPortrait(row, creature)
@@ -191,8 +225,12 @@ local function setPortrait(row, creature)
     model:SetSize(ROW - 2, ROW - 2)
     model:SetPoint("RIGHT", -4, 0)
     -- The zoom again once the model is in: some clients reset the camera then.
+    -- (and the next portrait in the queue may start).
     if model:HasScript("OnModelLoaded") then
-      model:SetScript("OnModelLoaded", function(self) self:SetPortraitZoom(1) end)
+      model:SetScript("OnModelLoaded", function(self)
+        self:SetPortraitZoom(1)
+        self.loaded = true
+      end)
     end
     row.portrait = model
   end
@@ -200,8 +238,7 @@ local function setPortrait(row, creature)
   if model.creature ~= creature then
     model.creature = creature
     if model.ClearModel then model:ClearModel() end
-    if model.SetCreature then pcall(model.SetCreature, model, creature) end
-    if model.SetPortraitZoom then model:SetPortraitZoom(1) end
+    queuePortrait(model)
   end
   model.wanted = true
 end
@@ -942,7 +979,8 @@ pages.writs = {
 -- Crate, profession or level, favor, cost, owned.
 local CRATE_COLUMNS = { 0, 270, 395, 455, 595, 710 }
 
-local CHEAPEST = "|TInterface/RaidFrame/ReadyCheck-Ready:12:12|t "
+local TICK = "|TInterface/RaidFrame/ReadyCheck-Ready:12:12|t"
+local CHEAPEST = TICK .. " "
 
 --- Whether the crates page shows a cost per favor (the Cost switch), not the absolute.
 local function perFavor()
@@ -1846,8 +1884,11 @@ local WISH_GROUPS = { { "writ", "Writs" }, { "crate", "Crates" }, { "material", 
 
 pages.wishlist = {
   title = "Wishlist",
-  target = true,  -- the character picker and Clear at the top right
+  target = true,  -- the character picker at the top right
+  search = true,
+  footer = "wish",  -- Buy missing, Mail available and Clear
   build = function()
+    local term = searchTerm()
     local target = ns.WishTarget()
     local wanted = ns.Wishlist()
     -- What each item on it is: a writ (by its writ item), a crate or a material.
@@ -1863,7 +1904,7 @@ pages.wishlist = {
     local rows = { writ = {}, crate = {}, material = {} }
     for id, count in pairs(wanted) do
       local writ, crate = writOf[id], crateOf[id]
-      local row = { id = id, count = count, writ = writ, crate = crate }
+      local row = { id = id, count = count, writ = writ, crate = crate, profession = writ and writ.profession }
       if writ then
         row.kind, row.tier, row.name = "writ", writ.tier, writ.name
         row.label = ns.Color(ns.WRIT_COLOR[writ.tier], "Writ: " .. writ.name)
@@ -1875,10 +1916,13 @@ pages.wishlist = {
         row.name = ns.Item(id, names[id])
         row.label = itemColored(id, nil, row.name)
       end
-      table.insert(rows[row.kind], row)
+      if not term or matches(term, row.name, row.label, row.profession, crate and crate.kind) then
+        table.insert(rows[row.kind], row)
+      end
     end
     local entries = {}
     local who = ns.ShownName(target)
+    local doneToday, usedToday = ns.WishDone(target)
     for _, group in ipairs(WISH_GROUPS) do
       local items = rows[group[1]]
       table.sort(items, function(a, b)
@@ -1888,22 +1932,23 @@ pages.wishlist = {
       if #items > 0 then
         local head = groupHeader("wishlist", "items", group[1], group[2])
         entries[#entries + 1] = head
-        local complete = 0
+        local nReady, nDone = 0, 0
         for _, row in ipairs(items) do
-          -- Done once the bags and bank hold enough; enough only with the mailbox counted
-          -- is not done yet: Mailbox, in yellow.
+          -- Done once the target has handed in the writ today (its material with it);
+          -- Ready once the bags and bank hold enough; enough only with the mailbox
+          -- counted: Mailbox, in yellow. A material shared with a writ handed in today
+          -- still needs what the rest of the list wants.
           local held = ns.CharacterHoldings(target, row.id)
-          local missing = math.max(0, row.count - held.total)
-          local done = held.bags + held.bank >= row.count
-          if done then complete = complete + 1 end
+          local need = row.count - (usedToday[row.id] or 0)
+          local missing = math.max(0, need - held.total)
+          local done = doneToday[row.id]
+          local ready = not done and held.bags + held.bank >= need
+          if done then nDone = nDone + 1 elseif ready then nReady = nReady + 1 end
           local _, icon = ns.Item(row.id, row.name)
           local function count(n) return n > 0 and tostring(n) or ns.Color(GREY, "0") end
           if not head.folded then
             local tips = {}
             if not held.mailSeen then tips[#tips + 1] = who .. "'s mailbox hasn't been opened with the addon yet." end
-            if row.kind == "material" then
-              tips[#tips + 1] = "Comes with a writ or crate: right-click that to take it off."
-            end
             entries[#entries + 1] = {
               icon = icon,
               item = row.id,
@@ -1913,32 +1958,35 @@ pages.wishlist = {
                 count(held.bags),
                 count(held.bank),
                 held.mailSeen and count(held.mail) or ns.Color(GREY, "?"),
-                (done and ns.Color(GREEN, "Done"))
+                (done and (ns.Color(GREY, "Done") .. " " .. TICK))
+                  or (ready and ns.Color(GREEN, "Ready"))
                   or (missing == 0 and ns.Color(GOLD, "Mailbox"))
                   or ns.Color(held.total > 0 and GOLD or ORANGE, tostring(missing)),
               },
               tip = tips[1] and table.concat(tips, "\n") or nil,
-              -- A writ or crate comes off with its material; a material only with them.
-              rightClick = ns.WishRemovable(row.id) and function() ns.WishRemove(row.id) end or nil,
-              rightClickTip = "Right-click: take it off the wishlist, with its material.",
+              -- One off: a writ or crate with its material, a material on its own.
+              rightClick = function() ns.WishRemove(row.id) end,
+              rightClickTip = row.kind == "material" and "Right-click: take one off the wishlist."
+                or "Right-click: take one off the wishlist, with its material.",
             }
           end
         end
-        head.right = ("%d / %d done"):format(complete, #items)
+        head.right = nDone > 0 and ("%d ready, %d done / %d"):format(nReady, nDone, #items)
+          or ("%d / %d ready"):format(nReady, #items)
       end
     end
-    if #entries == 0 then
+    if term and #entries == 0 and next(wanted) then
+      entries[1] = noMatch(term)
+    elseif #entries == 0 then
       entries[1] = { header = ns.Color(GREY, "Nothing on the wishlist.") }
       entries[2] = { header = ns.Color(GREY,
         "Right-click a writ, a crate or its material, a turn-in NPC or a zone to add it.") }
     end
-    local text = target == ns.Character()
-      and ("For %s, the character you play: bags and bank now, the mailbox as last opened."):format(who)
-      or ("For %s: bags and bank as when last played, the mailbox as last opened there."):format(who)
-    return entries, WISH_COLUMNS, text .. " Right-click a writ or crate to take it off with its material.", {
+    return entries, WISH_COLUMNS, nil, {
       "Item", "Wanted", "Bags", "Bank", "Mail",
       { "Missing", "Wanted less what the character has in its bags, bank and mailbox.\n"
-        .. "Done: the bags and bank hold enough. Mailbox: enough only with what is in the mailbox." },
+        .. "Ready: the bags and bank hold enough. Mailbox: enough only with what is in the mailbox.\n"
+        .. "Done: the writ's daily is handed in today (and its material with it), until the reset." },
     }
   end,
 }
@@ -2080,6 +2128,7 @@ function refresh()
     panels[page.panel]:Refresh()
   end
 
+  if page.footer ~= "wish" then wishBar:Hide() end
   if page.footer == "scan" then
     -- The scan button scans the items this page prices; the turn-ins page's are the writs.
     scanBar.scope = page.scanScope or key
@@ -2088,6 +2137,12 @@ function refresh()
     fillBar:Hide()
     scanBar:Show()
     updateScanBar()
+  elseif page.footer == "wish" then
+    scanBar:Hide()
+    fillBar:Hide()
+    note:Hide()
+    wishBar:Refresh()
+    wishBar:Show()
   elseif page.footer == "fill" then
     -- The Craft button fills every crate the bags can, one kind after the other.
     local fills = fastFills()
@@ -2140,7 +2195,8 @@ function refresh()
     local text = searches[key] or ""
     if search:GetText() ~= text then search:SetText(text) end
     search:ClearAllPoints()
-    search:SetPoint("TOPRIGHT", -(40 + (page.sorts and (#page.sorts * 104 + 6) or 0)), -36)
+    search:SetPoint("TOPRIGHT", -(40 + (page.sorts and (#page.sorts * 104 + 6) or 0)
+      + (page.target and 234 or 0)), -36)
     search:Show()
   else
     search:ClearFocus()
@@ -2184,18 +2240,15 @@ local function buildSearch()
 end
 
 --- The wishlist page's top right: who it is for (a button that opens a list of the
---- account's characters) and Clear.
+--- account's characters).
 local function buildWishBar()
   local bar = CreateFrame("Frame", nil, window)
-  bar:SetSize(330, 24)
+  bar:SetSize(230, 24)
   bar:SetPoint("TOPRIGHT", -34, -34)
   bar.label = bar:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
   bar.label:SetText("For")
-  bar.clear = Skin.Button(bar, "Clear", 70, 22)
-  bar.clear:SetPoint("RIGHT", 0, 0)
-  bar.clear:SetScript("OnClick", function() ns.WishClear() end)
   bar.who = Skin.Button(bar, "", 200, 22)
-  bar.who:SetPoint("RIGHT", bar.clear, "LEFT", -8, 0)
+  bar.who:SetPoint("RIGHT", 0, 0)
   bar.label:SetPoint("RIGHT", bar.who, "LEFT", -6, 0)
   bar.who.arrow = bar.who:CreateTexture(nil, "OVERLAY")
   bar.who.arrow:SetTexture("Interface/ChatFrame/ChatFrameExpandArrow")
@@ -2442,6 +2495,96 @@ local function build()
   fillBar.text:SetPoint("LEFT", fillBar.button, "RIGHT", 10, 0)
   fillBar.text:SetPoint("RIGHT", fillBar, "RIGHT", 0, 0)
   fillBar.text:SetJustifyH("LEFT")
+
+  -- The wishlist's foot: Buy missing at the auction house, Mail available at a mailbox,
+  -- each with how many it would buy or mail.
+  wishBar = CreateFrame("Frame", nil, window)
+  wishBar:SetPoint("BOTTOMLEFT", MENU + 8, 12)
+  wishBar:SetPoint("BOTTOMRIGHT", -14, 12)
+  wishBar:SetHeight(26)
+  wishBar:Hide()
+  wishBar.buy = Skin.Button(wishBar, "Buy missing", 150, 24)
+  wishBar.buy:SetPoint("LEFT", 0, 0)
+  wishBar.buy:SetScript("OnClick", function() ns.WishBuy() end)
+  wishBar.mail = Skin.Button(wishBar, "Mail available", 150, 24)
+  wishBar.mail:SetPoint("LEFT", wishBar.buy, "RIGHT", 8, 0)
+  wishBar.mail:SetScript("OnClick", function() ns.WishMail() end)
+  -- Clear: a second click within a few seconds empties the list (no undo, so one click
+  -- only asks).
+  wishBar.clear = Skin.Button(wishBar, "Clear", 70, 24)
+  wishBar.clear:SetPoint("LEFT", wishBar.mail, "RIGHT", 8, 0)
+  local clearAsked, clicks = false, 0
+  wishBar.clear:SetScript("OnClick", function()
+    if clearAsked then
+      clearAsked = false
+      ns.WishClear()
+      wishBar:Refresh()
+      return
+    end
+    clearAsked = true
+    clicks = clicks + 1
+    local mine = clicks
+    wishBar:Refresh()
+    C_Timer.After(3, function()
+      if mine == clicks and clearAsked then
+        clearAsked = false
+        wishBar:Refresh()
+      end
+    end)
+  end)
+  wishBar:HookScript("OnHide", function() clearAsked = false end)
+  -- What the wishlist is worth, at the right; a hint for a greyed button between.
+  wishBar.worth = wishBar:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+  wishBar.worth:SetPoint("RIGHT", wishBar, "RIGHT", 0, 0)
+  wishBar.worth:SetJustifyH("RIGHT")
+  wishBar.text = wishBar:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  wishBar.text:SetPoint("LEFT", wishBar.clear, "RIGHT", 10, 0)
+  wishBar.text:SetPoint("RIGHT", wishBar.worth, "LEFT", -10, 0)
+  wishBar.text:SetJustifyH("LEFT")
+  -- One line, cut short with "..." where the room runs out (wrapped, it ran over the buttons).
+  wishBar.text:SetWordWrap(false)
+  if wishBar.text.SetMaxLines then wishBar.text:SetMaxLines(1) end
+  --- A button's text, the button as wide as it needs (at least `least`).
+  local function label(button, text, least)
+    button:SetText(text)
+    local fs = button.GetFontString and button:GetFontString()
+    local w = fs and tonumber(fs:GetStringWidth()) or 0
+    button:SetWidth(math.max(least, math.ceil(w) + 24))
+  end
+  function wishBar:Refresh()
+    local toBuy, toMail = ns.WishToBuy(), ns.WishToMail()
+    local buyN, mailN = 0, 0
+    for _, m in ipairs(toBuy) do buyN = buyN + m.need end
+    for _, m in ipairs(toMail) do mailN = mailN + m.count end
+    local ah = ns.AuctionHouseOpen() and ns.CanBuy()
+    local mailbox = ns.MailboxOpen and ns.MailboxOpen()
+    local other = ns.WishTarget() ~= ns.Character()
+    label(self.buy, buyN > 0 and ("Buy missing (%d)"):format(buyN) or "Buy missing", 130)
+    self.buy:SetEnabled(ah and buyN > 0)
+    label(self.mail, mailN > 0 and ("Mail available (%d)"):format(mailN) or "Mail available", 130)
+    self.mail:SetEnabled(mailbox and other and mailN > 0)
+    local empty = next(ns.Wishlist()) == nil
+    if empty then clearAsked = false end
+    label(self.clear, clearAsked and ns.Color(ORANGE, "Click again to clear") or "Clear", 70)
+    self.clear:SetEnabled(not empty)
+    local hint
+    if buyN > 0 and not ah then
+      hint = "Buy at the AH."
+    elseif mailN > 0 and not mailbox then
+      hint = "Mail at a mailbox."
+    elseif not other then
+      hint = "Pick another character to mail to."
+    end
+    self.text:SetText(hint and ns.Color(GREY, hint) or "")
+    local rep, favor, unknown = ns.WishWorth()
+    local parts = {}
+    if rep > 0 then parts[#parts + 1] = ns.Color(GOLD, ("+%d rep"):format(rep)) end
+    if favor > 0 or unknown > 0 then
+      parts[#parts + 1] = ns.Color(GOLD, ("+%d favor"):format(favor))
+        .. (unknown > 0 and ns.Color(ORANGE, " + ?") or "")
+    end
+    self.worth:SetText(#parts > 0 and (ns.Color(GREY, "Worth ") .. table.concat(parts, ns.Color(GREY, ", "))) or "")
+  end
 
   -- The pages that aren't lists.
   panels.overview = ns.BuildOverview(window, WIDTH - MENU - 22)

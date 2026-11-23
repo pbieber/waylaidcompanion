@@ -36,6 +36,10 @@ local AH = C_AuctionHouse
 local CAN = AH ~= nil and AH.SendSearchQuery ~= nil and AH.MakeItemKey ~= nil
   and AH.StartCommoditiesPurchase ~= nil and AH.PlaceBid ~= nil
 local TIMEOUT = 8       -- seconds to wait for the auction house before giving up
+-- A browse for an item's key (the first look at an item): the pages asked for when it isn't
+-- on the first, and the seconds to wait for an answer before searching with a made key.
+-- (The browse used to wait the whole TIMEOUT for an item on a later page: a slow first look.)
+local BROWSE_PAGES, BROWSE_WAIT = 5, 3
 local PAY_TIMEOUT = 20  -- seconds to wait for a purchase to be confirmed
 -- Seconds to wait, after the auction house reports an error while paying, for the
 -- purchase to be confirmed anyway: WoW Forever reports error 10 for purchases that go
@@ -692,7 +696,16 @@ local function browseResults(results)
     end
   end
   if not s.key then
-    if AH.HasFullBrowseResults and not AH.HasFullBrowseResults() then return end
+    if AH.HasFullBrowseResults and not AH.HasFullBrowseResults() then
+      -- More pages: ask for the next (the driver sends it when the AH is ready); after a
+      -- few, search with a made key instead.
+      if AH.RequestMoreBrowseResults and (buy.pages or 0) < BROWSE_PAGES then
+        buy.state, buy.waited = "browsemore", 0
+      else
+        buy.state, buy.waited, buy.seen = "send", 0, {}
+      end
+      return
+    end
     if ns.RecordPrice then ns.RecordPrice(s.id, 0) end
     buy.state = "none"
     return show({ status = ns.Color(GREY, "None listed."), qty = s.need, action = "Skip" })
@@ -726,7 +739,14 @@ local function matBrowsed(results)
       return
     end
   end
-  if AH.HasFullBrowseResults and not AH.HasFullBrowseResults() then return end
+  if AH.HasFullBrowseResults and not AH.HasFullBrowseResults() then
+    if AH.RequestMoreBrowseResults and (buy.pages or 0) < BROWSE_PAGES then
+      buy.state, buy.waited = "matbrowsemore", 0
+    else
+      buy.state, buy.waited = "matsend", 0
+    end
+    return
+  end
   matDone({})
 end
 
@@ -754,13 +774,14 @@ local function pollResults()
 end
 
 local BLOCKED = { ADDON_ACTION_BLOCKED = true, ADDON_ACTION_FORBIDDEN = true }
-local SEARCHING = { browse0 = true, browse = true, send = true, wait = true }
+local SEARCHING = { browse0 = true, browse = true, browsemore = true, send = true, wait = true }
 -- Looking at a writ's or crate's material before its own search.
-local MATERIAL = { matbrowse0 = true, matbrowse = true, matsend = true, matwait = true }
+local MATERIAL = { matbrowse0 = true, matbrowse = true, matbrowsemore = true, matsend = true, matwait = true }
 local STAGES = {
   offer = "offering", quote = "asking the price", confirm = "confirming",
   paying = "buying", next = "between auctions", failed = "stopped", none = "nothing listed",
   wait = "searching", send = "searching", browse = "browsing", browse0 = "browsing", ask = "searching",
+  browsemore = "browsing", matbrowsemore = "browsing the material",
   matbrowse0 = "browsing the material", matbrowse = "browsing the material",
   matsend = "searching the material", matwait = "searching the material",
 }
@@ -768,7 +789,7 @@ local STAGES = {
 local events = CreateFrame("Frame")
 for _, event in ipairs({ "COMMODITY_SEARCH_RESULTS_UPDATED", "ITEM_SEARCH_RESULTS_UPDATED",
   "COMMODITY_SEARCH_RESULTS_ADDED", "ITEM_SEARCH_RESULTS_ADDED",
-  "AUCTION_HOUSE_BROWSE_RESULTS_UPDATED", "AUCTION_HOUSE_BROWSE_FAILURE",
+  "AUCTION_HOUSE_BROWSE_RESULTS_UPDATED", "AUCTION_HOUSE_BROWSE_RESULTS_ADDED", "AUCTION_HOUSE_BROWSE_FAILURE",
   "COMMODITY_PRICE_UPDATED", "COMMODITY_PRICE_UNAVAILABLE", "COMMODITY_PURCHASE_SUCCEEDED",
   "COMMODITY_PURCHASE_FAILED", "AUCTION_HOUSE_PURCHASE_COMPLETED", "AUCTION_HOUSE_CLOSED",
   "AUCTION_HOUSE_SHOW_ERROR", "BIDS_UPDATED", "UI_ERROR_MESSAGE",
@@ -804,7 +825,8 @@ events:SetScript("OnEvent", function(_, event, ...)
     end
     failed(("Blocked: %s while %s."):format(
       tostring(fn or "?"), STAGES[where] or tostring(where)))
-  elseif event == "AUCTION_HOUSE_BROWSE_RESULTS_UPDATED" then
+  elseif event == "AUCTION_HOUSE_BROWSE_RESULTS_UPDATED" or event == "AUCTION_HOUSE_BROWSE_RESULTS_ADDED" then
+    -- (A page asked for arrives as ADDED: the whole list so far is read either way.)
     if buy.state == "browse" then
       browseResults(AH.GetBrowseResults())
     elseif buy.state == "matbrowse" then
@@ -883,7 +905,7 @@ driver:SetScript("OnUpdate", function(_, elapsed)
       if buy.waited > TIMEOUT then failed("AH busy. Try again.") end
       return
     end
-    buy.state, buy.waited, buy.clickSent = "browse", 0, false
+    buy.state, buy.waited, buy.clickSent, buy.pages = "browse", 0, false, 0
     local name = GetItemInfo and GetItemInfo(s.id)  -- the real name, not a stand-in
     if AH.SendBrowseQuery and name then
       s.name = name
@@ -900,19 +922,28 @@ driver:SetScript("OnUpdate", function(_, elapsed)
     local name = buy.state == "matbrowse0" and GetItemInfo and GetItemInfo(m.id)
     buy.waited, buy.clickSent = 0, false
     if name and AH.SendBrowseQuery then
-      buy.state = "matbrowse"
+      buy.state, buy.pages = "matbrowse", 0
       AH.SendBrowseQuery({ searchString = name, sorts = {}, filters = {}, itemClassFilters = {} })
     else
       buy.matKey = buy.matKey or AH.MakeItemKey(m.id)
       buy.state = "matwait"
       AH.SendSearchQuery(buy.matKey, sorts(), true)
     end
-  elseif buy.state == "matbrowse" and buy.waited > TIMEOUT then
+  elseif buy.state == "browsemore" or buy.state == "matbrowsemore" then
+    local material = buy.state == "matbrowsemore"
+    if not ready then
+      if buy.waited > BROWSE_WAIT then buy.state, buy.waited = material and "matsend" or "send", 0 end
+      return
+    end
+    buy.pages = (buy.pages or 0) + 1
+    buy.state, buy.waited = material and "matbrowse" or "browse", 0
+    AH.RequestMoreBrowseResults()
+  elseif buy.state == "matbrowse" and buy.waited > BROWSE_WAIT then
     buy.state, buy.waited = "matsend", 0  -- no browse answer: search with a made key
   elseif buy.state == "matwait" then
     if buy.waited > 1.5 then pollMaterial() end
     if buy.state == "matwait" and buy.waited > TIMEOUT then matDone(nil) end
-  elseif buy.state == "browse" and buy.waited > TIMEOUT then
+  elseif buy.state == "browse" and buy.waited > BROWSE_WAIT then
     buy.state, buy.waited = "send", 0  -- no browse answer: search with a made key
   elseif buy.state == "send" then
     if not ready then
@@ -1163,6 +1194,22 @@ function ns.BuyMaterials(list)
   if not dialog then makeDialog() end
   buy = { title = "Missing material", steps = steps, index = 1, bought = 0, waited = 0 }
   search(true)  -- the click in the Transfer menu
+end
+
+--- Buy a list of items, each as many as `need`, one step each: { { id, need, name,
+--- material }, ... }, material true for those sold in bulk. `title` heads the window (the
+--- Wishlist page's Buy missing).
+function ns.BuyList(title, list)
+  if not canStart(title:lower() .. " items", function() ns.BuyList(title, list) end) then return end
+  local steps = {}
+  for _, m in ipairs(list) do
+    local name, icon = ns.Item(m.id, m.name)
+    steps[#steps + 1] = { id = m.id, material = m.material or nil, name = name, icon = icon, need = m.need }
+  end
+  if #steps == 0 then return end
+  if not dialog then makeDialog() end
+  buy = { title = title, steps = steps, index = 1, bought = 0, waited = 0 }
+  search(true)  -- the click on the button
 end
 
 --- Buy what writ recipients (stops from ns.Stops) want: one of each of their writs not

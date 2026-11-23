@@ -291,6 +291,9 @@ function ns.BuildOptions(parent, width)
     GameTooltip:AddLine("While another character is the wishlist's target, the writs, crates and "
       .. "materials it still lacks glow green in your bags, bank and mailbox, to mail over.", 1, 1, 1, true)
     GameTooltip:AddLine(" ")
+    GameTooltip:AddLine("Hold Alt: in your bags the writs handed in in the zone you are in glow, "
+      .. "and at a mailbox everything on the wishlist, ticked or not.", 1, 1, 1, true)
+    GameTooltip:AddLine(" ")
     GameTooltip:AddLine("The game's own bag, bank and mail windows only.", 0.8, 0.8, 0.8, true)
   end)
   note("How a writ, crate, material, NPC or zone is added to the wishlist, and taken off it "

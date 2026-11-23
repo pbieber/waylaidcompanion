@@ -508,6 +508,38 @@ function ns.DoneToday(quest)
   return IsQuestDone and IsQuestDone(quest) and true or false
 end
 
+--- Seconds until the daily reset, nil where the client cannot say.
+local function untilReset()
+  local dt = C_DateAndTime
+  local s = dt and dt.GetSecondsUntilDailyReset and dt.GetSecondsUntilDailyReset()
+  if not tonumber(s) and GetQuestResetTime then s = GetQuestResetTime() end
+  s = tonumber(s)
+  return s and s > 0 and s or nil
+end
+
+--- Note which writs the character played has handed in today, for the other characters'
+--- pages (the game only answers for the character played): ns.db.doneToday[key] =
+--- { reset = when the day ends (time()), quests = { [quest] = true } }.
+function ns.SaveDoneToday()
+  local db, key = ns.db, ns.Character and ns.Character()
+  if not (db and key and time) then return end
+  local quests = {}
+  for _, writ in ipairs(ns.writs) do
+    if writ.quest and ns.DoneToday(writ.quest) then quests[writ.quest] = true end
+  end
+  db.doneToday = db.doneToday or {}
+  db.doneToday[key] = { reset = time() + (untilReset() or 86400), quests = quests }
+end
+
+--- True once character `key` has handed in a writ's quest today: the game's word for the
+--- character played, what was noted on the others before today's reset.
+function ns.CharacterDoneToday(key, quest)
+  if not key or key == ns.Character() then return ns.DoneToday(quest) end
+  local saved = ns.db and ns.db.doneToday and ns.db.doneToday[key]
+  if not (saved and saved.quests and saved.quests[quest]) then return false end
+  return (tonumber(saved.reset) or 0) > (time and time() or 0)
+end
+
 -- "A" or "H", nil before the game knows (or for a neutral character).
 function ns.Side()
   local group = UnitFactionGroup and UnitFactionGroup("player")
@@ -858,6 +890,23 @@ local DEFAULTS = { page = "overview", writSort = "level", crateSort = "level", t
   itemColor = "tier", wishClick = "right", turninRows = "npc",
   theme = "modern", mailWhat = "writs" }
 
+-- The newer clients' interaction window events, by window type (Enum.PlayerInteractionType):
+-- WoW Forever doesn't always send MAIL_CLOSED or BANKFRAME_CLOSED (Questie reads these for
+-- them too), and a mailbox taken for open after it closed let the addon try to mail.
+local INTERACTION = Enum and Enum.PlayerInteractionType or {}
+local MAILBOX, BANKER = tonumber(INTERACTION.MailInfo) or 17, tonumber(INTERACTION.Banker) or 8
+local OPENED = { [MAILBOX] = "MAIL_SHOW", [BANKER] = "BANKFRAME_OPENED" }
+local CLOSED = { [MAILBOX] = "MAIL_CLOSED", [BANKER] = "BANKFRAME_CLOSED" }
+ns.INTERACTION_EVENTS = { "PLAYER_INTERACTION_MANAGER_FRAME_SHOW", "PLAYER_INTERACTION_MANAGER_FRAME_HIDE" }
+
+--- The older event an interaction window event stands for (MAIL_SHOW, MAIL_CLOSED,
+--- BANKFRAME_OPENED, BANKFRAME_CLOSED), else the event itself; nil for another window.
+function ns.InteractionEvent(event, kind)
+  if event == "PLAYER_INTERACTION_MANAGER_FRAME_SHOW" then return OPENED[kind] end
+  if event == "PLAYER_INTERACTION_MANAGER_FRAME_HIDE" then return CLOSED[kind] end
+  return event
+end
+
 local listeners = {}
 --- Call fn whenever what the pages show may have changed (bags, quests, item names).
 function ns.OnChange(fn)
@@ -894,7 +943,10 @@ for _, event in ipairs({ "ADDON_LOADED", "PLAYER_LOGIN", "BAG_UPDATE", "QUEST_TU
   -- Registering an event this client does not have is an error.
   pcall(events.RegisterEvent, events, event)
 end
+for _, event in ipairs(ns.INTERACTION_EVENTS) do pcall(events.RegisterEvent, events, event) end
 events:SetScript("OnEvent", function(_, event, arg1)
+  event = ns.InteractionEvent(event, arg1)
+  if not event then return end
   if event == "ADDON_LOADED" then
     if arg1 ~= ADDON then return end
     PuggerWaylaidCompanionDB = PuggerWaylaidCompanionDB or {}
@@ -946,9 +998,15 @@ events:SetScript("OnEvent", function(_, event, arg1)
   if event == "MAIL_INBOX_UPDATE" and not scanMail() then return end
   if QUEST_EVENTS[event] and ns.LocateSoon then ns.LocateSoon() end
   if event == "QUEST_TURNED_IN" and ns.Learn then ns.Learn(arg1) end
+  if event == "PLAYER_ENTERING_WORLD" then ns.SaveDoneToday() end
   ns.Changed()
   -- The completed flag can trail the turn-in by a moment.
-  if event == "QUEST_TURNED_IN" then C_Timer.After(1.5, ns.Changed) end
+  if event == "QUEST_TURNED_IN" then
+    C_Timer.After(1.5, function()
+      ns.SaveDoneToday()
+      ns.Changed()
+    end)
+  end
 end)
 
 SLASH_PUGGERWAYLAID1 = "/pwc"

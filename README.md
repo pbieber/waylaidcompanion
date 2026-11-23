@@ -21,7 +21,7 @@ A writ's or crate's own tooltip, wherever the game shows it (bags, auction house
 
 The world map markers also show on [OpenMap](https://www.curseforge.com/wow/addons/openmap)'s map, sized with its zoom and its own icon size.
 
-The writs, crates, turn-ins and rewards pages have a **Search** box beside their sort buttons: type part of a name (a writ, crate, material, profession, recipient, zone, quartermaster or reward) to keep only what matches. Click a group header to fold it. On the writs, crates and turn-ins pages, the **Cost** button at the bottom right switches between the cost per rep (or favor) and the absolute cost. Shift-click an item to link it in chat.
+The writs, crates, turn-ins, wishlist and rewards pages have a **Search** box beside their sort buttons: type part of a name (a writ, crate, material, profession, recipient, zone, quartermaster or reward) to keep only what matches. Click a group header to fold it. On the writs, crates and turn-ins pages, the **Cost** button at the bottom right switches between the cost per rep (or favor) and the absolute cost. Shift-click an item to link it in chat.
 
 The addon also notes what each character spends at the auction house on writs, crates and their materials, for a later version to show. It stays in your saved variables and is not part of `/pwc export`.
 
@@ -96,7 +96,16 @@ Right-click to add to the wishlist:
 - a material under a crate: the crate and that material;
 - a writ recipient or a zone on the Turn-ins page: every writ handed in there and its material.
 
-The row flashes green when it is added. Right-click again to add as much again. Under Options, **Wishlist: Add with** can make it a shift-right-click instead, for adding and for taking off. The Wishlist page lists writs, crates and materials, each with how many you want and how many the chosen character has in its bags, bank and mailbox, and how many are still missing: **Done** once the bags and bank hold enough, **Mailbox** in yellow when enough is there only with what is waiting in the mailbox. Pick the character at the top right; it stays chosen until you pick another. The character you are playing counts its bags now; another counts as it was when you last played it, and its mailbox as it was when last open there. Right-click a writ or crate to take it off, with the material that came with it (a material row comes off only with its writ or crate), or **Clear** to empty the list. While another character is the target, what it still lacks glows green in your bags, bank and mailbox (the game's own windows, not bag addons or TradeSkillMaster's mail window), so you can mail it over; untick **Glow in bags, bank and mail** under Options to turn that off.
+The row flashes green when it is added. Right-click again to add as much again. Under Options, **Wishlist: Add with** can make it a shift-right-click instead, for adding and for taking off. The Wishlist page lists writs, crates and materials, each with how many you want and how many the chosen character has in its bags, bank and mailbox, and how many are still missing: **Ready** once the bags and bank hold enough, **Mailbox** in yellow when enough is there only with what is waiting in the mailbox, and **Done** once that character has handed in the writ's daily today (its material with it) until the daily reset. Another character's turn-ins count as they were when you last played it. Done rows are left out of buying, mailing and the glow. Pick the character at the top right; it stays chosen until you pick another. The character you are playing counts its bags now; another counts as it was when you last played it, and its mailbox as it was when last open there. Right-click a row to take one off: a writ with its material, a crate with one crate's worth of its material, or one of a material on its own. The **Search** box keeps the rows whose names match.
+
+At the foot of the page:
+
+- **Buy missing**, at the auction house: buys what the chosen character still lacks, less what the character you are playing holds in its bags.
+- **Mail available**, at a mailbox, while another character is chosen: mails it what your bags hold of what it still lacks, a click on **Send** per mail.
+- **Clear** empties the wishlist. The first click asks (**Click again to clear**); a second click within three seconds clears it.
+- At the right, what the wishlist is worth handed in: the reputation of its writs and the Merchant's Favor of its crates (**+ ?** when a crate's favor isn't known yet).
+
+While another character is the target, what it still lacks glows green in your bags, bank and mailbox (the game's own windows, not bag addons or TradeSkillMaster's mail window), so you can mail it over; untick **Glow in bags, bank and mail** under Options to turn that off. Hold **Alt**: your bags glow the writs handed in in the zone you are in, and an open mailbox everything on the wishlist, whoever it is for.
 
 ## Writs on other characters
 

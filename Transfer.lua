@@ -448,7 +448,7 @@ end
 --- Attachments for `count` of an item from the bags: one move per stack used.
 local function attach(take, pieces, id, count, isLead)
   for _, n in ipairs(take(id, count)) do
-    pieces[#pieces + 1] = { id = id, left = n, from = "bags", to = "mail", writ = isLead }
+    pieces[#pieces + 1] = { id = id, left = n, count = n, from = "bags", to = "mail", writ = isLead }
   end
 end
 
@@ -593,6 +593,11 @@ end
 local function showMail(text, action)
   window.heading:SetText(("To %s  |cff808080(%d of %d)|r"):format(mail.name, mail.i, #mail.mails))
   window.text:SetText(text)
+  -- As tall as the text needs (a mail of many sets or wishlist items wraps to several
+  -- lines), the buttons kept clear below it: the title and heading above the text take
+  -- about 58, the buttons and margins below 50.
+  local textHeight = tonumber(window.text:GetStringHeight()) or 0
+  window:SetHeight(math.max(130, math.ceil(58 + textHeight + 50)))
   if action then
     window.go:SetText(action)
     window.go:Enable()
@@ -613,6 +618,7 @@ local function endMail(message)
 end
 
 local attachNext
+local startMail
 
 local function subjectOf(m)
   local subject = mail.prefix .. table.concat(m.sets, ", ")
@@ -636,13 +642,44 @@ local function attachments()
   return n
 end
 
---- The mail is packed: say what is in it and wait for Send.
+-- Which items are writs and which crates, to sum a mail up.
+local isWrit, isCrate
+--- What a mail holds, summed up: "3 writs, 60 materials" (crates too, where it has any).
+local function summary(m)
+  if not isWrit then
+    isWrit, isCrate = {}, {}
+    for _, writ in ipairs(ns.writs) do isWrit[writ.writItem] = true end
+    for _, crate in ipairs(ns.crates) do isCrate[crate.item] = true end
+  end
+  -- Each piece's planned count (`left` is counted down as it is attached).
+  local writs, crates, materials = 0, 0, 0
+  for _, p in ipairs(m.pieces) do
+    local n = p.count or p.left
+    if isWrit[p.id] then
+      writs = writs + n
+    elseif isCrate[p.id] then
+      crates = crates + n
+    else
+      materials = materials + n
+    end
+  end
+  local parts = {}
+  local function add(n, word)
+    if n > 0 then parts[#parts + 1] = ("%d %s%s"):format(n, word, n == 1 and "" or "s") end
+  end
+  add(writs, "writ")
+  add(crates, "crate")
+  add(materials, "material")
+  return #parts > 0 and table.concat(parts, ", ") or "Nothing"
+end
+
+--- The mail is packed: say what is in it, summed up, and wait for Send.
 local function ready()
   local m = mail.mails[mail.i]
   mail.state = "ready"
   fillFields(m)
   local postage = GetSendMailPrice and GetSendMailPrice() or 0
-  showMail(table.concat(m.sets, ", ") .. "\n"
+  showMail(summary(m) .. "\n"
     .. ns.Color(GREY, ("%d attachment%s. Postage %s."):format(#m.pieces, #m.pieces == 1 and "" or "s", money(postage))), "Send")
 end
 
@@ -686,7 +723,11 @@ for _, event in ipairs({ "MAIL_SHOW", "MAIL_CLOSED", "MAIL_SEND_SUCCESS", "MAIL_
   "BANKFRAME_OPENED", "BANKFRAME_CLOSED", "AUCTION_HOUSE_SHOW", "AUCTION_HOUSE_CLOSED" }) do
   pcall(mailEvents.RegisterEvent, mailEvents, event)
 end
+-- The mailbox and bank closing as the newer clients say it, too (Core.lua).
+for _, event in ipairs(ns.INTERACTION_EVENTS) do pcall(mailEvents.RegisterEvent, mailEvents, event) end
 mailEvents:SetScript("OnEvent", function(_, event, ...)
+  event = ns.InteractionEvent(event, (...))
+  if not event then return end
   if event == "MAIL_SHOW" then
     mailOpen = true
     ns.Changed()
@@ -840,6 +881,16 @@ local function showSendTab()
   return SendMailFrame:IsShown()
 end
 
+--- Start mailing packed mails (see pack) to `address`, from the Send Mail tab, one mail
+--- per click on Send; `prefix` starts each subject.
+function startMail(address, mails, prefix)
+  if not showSendTab() then return say("Open the Send Mail tab.") end
+  if attachments() > 0 then return say("Clear the mail's attachments.") end
+  if not window then makeWindow() end
+  mail = { to = address, name = address, prefix = prefix, mails = mails, i = 1, sent = 0, waited = 0 }
+  attachNext()
+end
+
 --- Mail to "Name Surname" what the Transfer page has chosen: one set of each writ in the
 --- bags (all, or the chosen zone's), or every crate with the material to fill it. On the
 --- inbox tab, it switches to Send Mail first.
@@ -856,12 +907,30 @@ function ns.MailSets(address)
     if zone then return say(("No full set in bags for %s."):format(ns.MailZoneName(zone))) end
     return say("No full set in bags.")
   end
-  if not showSendTab() then return say("Open the Send Mail tab.") end
-  if attachments() > 0 then return say("Clear the mail's attachments.") end
-  if not window then makeWindow() end
-  mail = { to = address, name = address, prefix = crates and "Crates: " or "Writs: ", mails = mails,
-    i = 1, sent = 0, waited = 0 }
-  attachNext()
+  startMail(address, mails, crates and "Crates: " or "Writs: ")
+end
+
+--- Mail to "Name Surname" items from the bags: { { id, count, name }, ... }, each as
+--- many as given (fewer where the bags hold fewer), packed into mails (the Wishlist
+--- page's Mail available).
+function ns.MailItems(address, items)
+  address = tidy(address)
+  if address == "" then return say("Enter a name.") end
+  if not mailOpen then return say("Open a mailbox.") end
+  if job or mail then return say("A transfer is running.") end
+  local total, take = bagPool()
+  local groups = {}
+  for _, item in ipairs(items) do
+    local n = math.min(item.count, total(item.id))
+    if n > 0 then
+      local pieces = {}
+      attach(take, pieces, item.id, n)
+      groups[#groups + 1] = { name = ("%d x %s"):format(n, item.name or itemName(item.id)), pieces = pieces }
+    end
+  end
+  local mails = pack(groups)
+  if #mails == 0 then return say("Nothing of it in bags.") end
+  startMail(address, mails, "Wishlist: ")
 end
 
 -- ---------------------------------------------------------------------------
