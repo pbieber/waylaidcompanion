@@ -10,6 +10,7 @@ ns.RECORDED_NPCS = {
   [3536] = { "Kris Legace", 1424, 80.15, 38.91, "Hillsbrad Foothills" },
   [4496] = { "Goblin Pit Boss", 1441, 79.9, 76.75, "Thousand Needles" },
   [4503] = { "Mudcrush Durtfeet", 1445, 35.16, 38.25, "Dustwallow Marsh" },
+  [5634] = { "Rhapsody Shindigger", 1425, 26.94, 48.57, "The Hinterlands" },
   [6176] = { "Bath'rah the Windwatcher", 1416, 80.51, 66.91, "Alterac Mountains" },
   [6548] = { "Magus Tirth", 1441, 78.29, 75.69, "Thousand Needles" },
   [6568] = { "Vizzklick", 1446, 51.02, 27.37, "Tanaris" },
@@ -24,13 +25,16 @@ ns.RECORDED_NPCS = {
   [11795] = { "Mylentha Riverbend", 1450, 51.76, 32.58, "Moonglade" },
   [11802] = { "Dendrite Starblaze", 1450, 56.22, 30.65, "Moonglade" },
   [11805] = { "Jarund Stoutstrider", 1451, 82.06, 18.07, "Silithus" },
+  [11863] = { "Azore Aldamort", 1443, 38.89, 27.16, "Desolace" },
   [12029] = { "Narianna", 1450, 53.36, 42.72, "Moonglade" },
   [13717] = { "Centaur Pariah", 1443, 50.5, 86.67, "Desolace" },
   [14437] = { "Gorzeeki Wildeyes", 1428, 12.44, 31.65, "Burning Steppes" },
+  [14470] = { "Impsy", 1448, 41.54, 45.01, "Felwood" },
   [14624] = { "Master Smith Burninate", 1427, 38.82, 28.5, "Searing Gorge" },
   [14634] = { "Lookout Captain Lolo Longstriker", 1427, 37.75, 26.55, "Searing Gorge" },
   [14743] = { "Jhordy Lapforge", 1446, 52.29, 26.89, "Tanaris" },
   [15175] = { "Khur Hornstriker", 1451, 48.67, 37.01, "Silithus" },
+  [15194] = { "Hermit Ortell", 1451, 67.19, 69.77, "Silithus" },
   [257673] = { "Ugkragg", 1428, 38.42, 35.44, "Burning Steppes" },
   [257743] = { "Hastings", 1430, 46.99, 75.32, "Deadwind Pass" },
   [257750] = { "Calliard", 1430, 48.35, 68.72, "Deadwind Pass" },
@@ -48,15 +52,9 @@ ns.RECORDED_NPCS = {
   [270919] = { "Ugbert", 1445, 40.99, 27.88, "Dustwallow Marsh" },
   [642320] = { "Battered Trunk", 1431, 26.27, 36.19, "Duskwood" },
   ["at:1418:619:542"] = { "Writ customer", 1418, 61.94, 54.24, "Badlands" },
-  ["at:1425:269:485"] = { "Writ customer", 1425, 26.94, 48.57, "The Hinterlands" },
-  ["at:1428:124:316"] = { "Writ customer", 1428, 12.44, 31.65, "Burning Steppes" },
   ["at:1429:838:921"] = { "Writ customer", 1429, 83.88, 92.13, "Elwynn Forest" },
   ["at:1432:430:865"] = { "Writ customer", 1432, 43.04, 86.51, "Loch Modan" },
   ["at:1440:647:801"] = { "Writ customer", 1440, 64.77, 80.15, "Ashenvale" },
-  ["at:1443:388:271"] = { "Writ customer", 1443, 38.89, 27.16, "Desolace" },
-  ["at:1443:623:389"] = { "Writ customer", 1443, 62.31, 38.96, "Desolace" },
-  ["at:1448:415:450"] = { "Writ customer", 1448, 41.54, 45.01, "Felwood" },
-  ["at:1451:671:697"] = { "Writ customer", 1451, 67.19, 69.77, "Silithus" },
   ["at:1452:576:880"] = { "Writ customer", 1452, 57.62, 88.08, "Winterspring" },
   ["at:1452:648:332"] = { "Writ customer", 1452, 64.84, 33.22, "Winterspring" },
 }
@@ -101,7 +99,7 @@ ns.RECORDED_WRITS = {
   [94274] = 262284, -- Golden Scale Coif
   [94275] = 14624, -- Solid Sharpening Stone
   [94277] = 7408, -- Truesilver Rod
-  [94281] = "at:1443:623:389", -- Advanced Target Dummy
+  [94281] = 11438, -- Advanced Target Dummy
   [94282] = 262072, -- Craftsman's Monocle
   [94283] = 10924, -- Goblin Land Mine
   [94284] = 262143, -- Catseye Ultra Goggles
@@ -110,10 +108,10 @@ ns.RECORDED_WRITS = {
   [94287] = 262294, -- Fire Goggles
   [94288] = 262379, -- Mithril Frag Bomb
   [94289] = 14743, -- Gyromatic Micro-Adjuster
-  [94290] = "at:1425:269:485", -- Mechanical Repair Kit
+  [94290] = 5634, -- Mechanical Repair Kit
   [94291] = 9272, -- Dark Iron Bomb
   [94292] = "at:1418:619:542", -- Comfortable Leather Hat
-  [94293] = "at:1443:388:271", -- Guardian Cloak
+  [94293] = 11863, -- Guardian Cloak
   [94294] = 262072, -- Dusky Bracers
   [94295] = 10924, -- Wild Leather Helmet
   [94296] = 262143, -- Wild Leather Shoulders
@@ -125,7 +123,7 @@ ns.RECORDED_WRITS = {
   [94303] = 9272, -- Thick Leather Ammo Pouch
   [94304] = 2817, -- Mageweave Bag
   [94307] = 10924, -- Shadoweave Robe
-  [94308] = "at:1448:415:450", -- Enchanted Mageweave Pouch
+  [94308] = 14470, -- Enchanted Mageweave Pouch
   [94309] = 11795, -- Star Belt
   [94310] = 262284, -- Black Mageweave Vest
   [94311] = 14634, -- Red Mageweave Pants
@@ -138,16 +136,18 @@ ns.RECORDED_WRITS = {
   [94322] = 11805, -- Limited Invulnerability Potion
   [94323] = 262024, -- Major Rejuvenation Potion
   [94324] = "at:1452:648:332", -- Distilled Firewater
+  [94326] = 7363, -- Radiant Belt
   [94327] = 257673, -- Orcish War Leggings
   [94328] = 257750, -- Mithril Spurs
   [94335] = 7363, -- Green Lens
   [94340] = 15175, -- Truesilver Transformer
   [94341] = 262033, -- Sniper Scope
+  [94346] = 257743, -- Runic Leather Headband
   [94347] = 11536, -- Wicked Leather Bracers
   [94350] = 262016, -- Runic Leather Bracers
-  [94354] = "at:1428:124:316", -- Runecloth Boots
+  [94354] = 14437, -- Runecloth Boots
   [94355] = 257743, -- Tuxedo Jacket
-  [94358] = "at:1451:671:697", -- Shadoweave Mask
+  [94358] = 15194, -- Shadoweave Mask
   [94360] = "at:1452:576:880", -- Soul Pouch
 }
 
@@ -514,33 +514,33 @@ ns.RECORDED_REWARDS = {
     } },
   },
   ["Durotar Supply and Logistics"] = {
-    [248196] = { npc = "Apothecary Durelle", time = 1794798632, items = {
+    [248196] = { npc = "Apothecary Durelle", time = 1795332724, items = {
       { id = 250381, name = "Recipe: Elixir of Lesser Spirit", price = 0, quantity = 1, costs = { { value = 45, name = "Merchant's Favor", icon = 135725 } } },
-      { id = 250978, name = "Recipe: Spellblasting Potion", price = 0, quantity = 1, costs = { { value = 45, name = "Merchant's Favor", icon = 135725 } } },
-      { id = 250990, name = "Recipe: Mender's Potion", price = 0, quantity = 1, costs = { { value = 45, name = "Merchant's Favor", icon = 135725 } } },
-      { id = 250378, name = "Recipe: Lesser Arcane Elixir", price = 0, quantity = 1, costs = { { value = 45, name = "Merchant's Favor", icon = 135725 } } },
-      { id = 250388, name = "Recipe: Elixir of Lesser Intellect", price = 0, quantity = 1, costs = { { value = 45, name = "Merchant's Favor", icon = 135725 } } },
       { id = 250367, name = "Recipe: Lesser Cleric's Elixir", price = 0, quantity = 1, costs = { { value = 45, name = "Merchant's Favor", icon = 135725 } } },
+      { id = 250388, name = "Recipe: Elixir of Lesser Intellect", price = 0, quantity = 1, costs = { { value = 45, name = "Merchant's Favor", icon = 135725 } } },
+      { id = 250378, name = "Recipe: Lesser Arcane Elixir", price = 0, quantity = 1, costs = { { value = 45, name = "Merchant's Favor", icon = 135725 } } },
+      { id = 250990, name = "Recipe: Mender's Potion", price = 0, quantity = 1, costs = { { value = 45, name = "Merchant's Favor", icon = 135725 } } },
       { id = 250376, name = "Recipe: Lesser Mageblood Elixir", price = 0, quantity = 1, costs = { { value = 45, name = "Merchant's Favor", icon = 135725 } } },
       { id = 250984, name = "Recipe: Frenzy Potion", price = 0, quantity = 1, costs = { { value = 45, name = "Merchant's Favor", icon = 135725 } } },
+      { id = 250978, name = "Recipe: Spellblasting Potion", price = 0, quantity = 1, costs = { { value = 45, name = "Merchant's Favor", icon = 135725 } } },
       { id = 250383, name = "Recipe: Elixir of Greater Spirit", price = 0, quantity = 1, standing = 5, costs = { { value = 120, name = "Merchant's Favor", icon = 135725 } } },
       { id = 250377, name = "Recipe: Greater Mageblood Elixir", price = 0, quantity = 1, standing = 5, costs = { { value = 120, name = "Merchant's Favor", icon = 135725 } } },
       { id = 250997, name = "Recipe: Dragonfire Potion", price = 0, quantity = 1, standing = 5, costs = { { value = 120, name = "Merchant's Favor", icon = 135725 } } },
       { id = 250369, name = "Recipe: Greater Cleric's Elixir", price = 0, quantity = 1, standing = 5, costs = { { value = 120, name = "Merchant's Favor", icon = 135725 } } },
       { id = 250371, name = "Recipe: Elixir of Greater Fortitude", price = 0, quantity = 1, standing = 5, costs = { { value = 120, name = "Merchant's Favor", icon = 135725 } } },
+      { id = 250994, name = "Recipe: Potion of Venomous Blood", price = 0, quantity = 1, standing = 6, costs = { { value = 180, name = "Merchant's Favor", icon = 135725 } } },
+      { id = 250373, name = "Recipe: Elixir of the Owl", price = 0, quantity = 1, standing = 6, costs = { { value = 180, name = "Merchant's Favor", icon = 135725 } } },
+      { id = 250993, name = "Recipe: Major Mender's Potion", price = 0, quantity = 1, standing = 6, costs = { { value = 180, name = "Merchant's Favor", icon = 135725 } } },
+      { id = 250372, name = "Recipe: Elixir of Wicked Regeneration", price = 0, quantity = 1, standing = 6, costs = { { value = 180, name = "Merchant's Favor", icon = 135725 } } },
+      { id = 250379, name = "Recipe: Elixir of Nature Power", price = 0, quantity = 1, standing = 6, costs = { { value = 180, name = "Merchant's Favor", icon = 135725 } } },
+      { id = 250981, name = "Recipe: Major Spellblasting Potion", price = 0, quantity = 1, standing = 6, costs = { { value = 180, name = "Merchant's Favor", icon = 135725 } } },
+      { id = 250998, name = "Recipe: Potion of Elemental Purging", price = 0, quantity = 1, standing = 6, costs = { { value = 180, name = "Merchant's Favor", icon = 135725 } } },
       { id = 250365, name = "Recipe: Elixir of the Phalanx", price = 0, quantity = 1, standing = 6, costs = { { value = 180, name = "Merchant's Favor", icon = 135725 } } },
       { id = 250995, name = "Recipe: Caustic Smog Potion", price = 0, quantity = 1, standing = 6, costs = { { value = 180, name = "Merchant's Favor", icon = 135725 } } },
       { id = 250364, name = "Recipe: Elixir of Cunning", price = 0, quantity = 1, standing = 6, costs = { { value = 180, name = "Merchant's Favor", icon = 135725 } } },
       { id = 250374, name = "Recipe: Elixir of Sages", price = 0, quantity = 1, standing = 6, costs = { { value = 180, name = "Merchant's Favor", icon = 135725 } } },
       { id = 250384, name = "Recipe: Elixir of the Whale", price = 0, quantity = 1, standing = 6, costs = { { value = 180, name = "Merchant's Favor", icon = 135725 } } },
       { id = 250386, name = "Recipe: Elixir of Ferocity", price = 0, quantity = 1, standing = 6, costs = { { value = 180, name = "Merchant's Favor", icon = 135725 } } },
-      { id = 250994, name = "Recipe: Potion of Venomous Blood", price = 0, quantity = 1, standing = 6, costs = { { value = 180, name = "Merchant's Favor", icon = 135725 } } },
-      { id = 250373, name = "Recipe: Elixir of the Owl", price = 0, quantity = 1, standing = 6, costs = { { value = 180, name = "Merchant's Favor", icon = 135725 } } },
-      { id = 250993, name = "Recipe: Major Mender's Potion", price = 0, quantity = 1, standing = 6, costs = { { value = 180, name = "Merchant's Favor", icon = 135725 } } },
-      { id = 250998, name = "Recipe: Potion of Elemental Purging", price = 0, quantity = 1, standing = 6, costs = { { value = 180, name = "Merchant's Favor", icon = 135725 } } },
-      { id = 250372, name = "Recipe: Elixir of Wicked Regeneration", price = 0, quantity = 1, standing = 6, costs = { { value = 180, name = "Merchant's Favor", icon = 135725 } } },
-      { id = 250379, name = "Recipe: Elixir of Nature Power", price = 0, quantity = 1, standing = 6, costs = { { value = 180, name = "Merchant's Favor", icon = 135725 } } },
-      { id = 250981, name = "Recipe: Major Spellblasting Potion", price = 0, quantity = 1, standing = 6, costs = { { value = 180, name = "Merchant's Favor", icon = 135725 } } },
       { id = 250987, name = "Recipe: Major Frenzy Potion", price = 0, quantity = 1, standing = 6, costs = { { value = 240, name = "Merchant's Favor", icon = 135725 } } },
       { id = 250387, name = "Recipe: Elixir of the Grizzly", price = 0, quantity = 1, standing = 6, costs = { { value = 240, name = "Merchant's Favor", icon = 135725 } } },
       { id = 271621, name = "Alchemy Certification", price = 0, quantity = 1, costs = { { value = 1000, name = "Merchant's Favor", icon = 135725 } } },
