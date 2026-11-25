@@ -5,36 +5,66 @@ local _, ns = ...
 -- Places writs are handed in that Data/Writs.lua does not have:
 -- [NPC id, or "at:map:x:y" for a spot nobody has named yet] = { name, uiMapID, x, y, zone }
 ns.RECORDED_NPCS = {
+  [2501] = { "\"Sea Wolf\" MacKinley", 1434, 27.78, 77.07, "Stranglethorn Vale" },
   [2663] = { "Narkk", 1434, 28.13, 74.43, "Stranglethorn Vale" },
   [2817] = { "Rigglefuzz", 1418, 42.41, 52.91, "Badlands" },
+  [2888] = { "Garek", 1418, 61.94, 54.26, "Badlands" },
+  [3000] = { "Gibbert", 1449, 44.1, 7.19, "Un'Goro Crater" },
   [3536] = { "Kris Legace", 1424, 80.15, 38.91, "Hillsbrad Foothills" },
   [4496] = { "Goblin Pit Boss", 1441, 79.9, 76.75, "Thousand Needles" },
   [4503] = { "Mudcrush Durtfeet", 1445, 35.16, 38.25, "Dustwallow Marsh" },
+  [4706] = { "Razzeric", 1441, 80.33, 76.09, "Thousand Needles" },
+  [5594] = { "Alchemist Pestlezugg", 1446, 50.89, 26.96, "Tanaris" },
+  [5598] = { "Atal'ai Exile", 1425, 33.75, 75.21, "The Hinterlands" },
   [5634] = { "Rhapsody Shindigger", 1425, 26.94, 48.57, "The Hinterlands" },
   [6176] = { "Bath'rah the Windwatcher", 1416, 80.51, 66.91, "Alterac Mountains" },
+  [6546] = { "Tabetha", 1445, 46.06, 57.09, "Dustwallow Marsh" },
   [6548] = { "Magus Tirth", 1441, 78.29, 75.69, "Thousand Needles" },
   [6568] = { "Vizzklick", 1446, 51.02, 27.37, "Tanaris" },
-  [7363] = { "Kum'isha the Collector", 1419, 51.8, 35.66, "Blasted Lands" },
+  [7363] = { "Kum'isha the Collector", 1419, 51.98, 35.65, "Blasted Lands" },
   [7408] = { "Spigot Operator Luglunket", 1446, 52.48, 28.43, "Tanaris" },
+  [7801] = { "Gilveradin Sunchaser", 1425, 26.71, 48.59, "The Hinterlands" },
+  [8379] = { "Archmage Xylem", 1447, 29.25, 40.21, "Azshara" },
   [8579] = { "Yeh'kinya", 1446, 66.99, 22.35, "Tanaris" },
+  [9116] = { "Eridan Bluewind", 1448, 51.35, 81.51, "Felwood" },
   [9272] = { "Spark Nilminer", 1449, 43.5, 7.43, "Un'Goro Crater" },
+  [9273] = { "Petra Grossen", 1449, 43.7, 7.24, "Un'Goro Crater" },
+  [9619] = { "Torwa Pathfinder", 1449, 71.64, 75.96, "Un'Goro Crater" },
+  [10921] = { "Taronn Redfeather", 1448, 50.89, 81.62, "Felwood" },
+  [10922] = { "Greta Mosshoof", 1448, 51.21, 82.11, "Felwood" },
   [10924] = { "Ivy Leafrunner", 1448, 50.95, 81.58, "Felwood" },
+  [11019] = { "Jessir Moonbow", 1448, 51.35, 82.01, "Felwood" },
+  [11038] = { "Caretaker Alen", 1423, 69.93, 53.72, "Eastern Plaguelands" },
+  [11140] = { "Egan", 1423, 11.36, 26.6, "Eastern Plaguelands" },
+  [11183] = { "Blixxrak", 1452, 61.67, 37.83, "Winterspring" },
+  [11185] = { "Xizzer Fizzbolt", 1452, 60.8, 38.6, "Winterspring" },
   [11438] = { "Bibbly F'utzbuckle", 1443, 62.31, 38.96, "Desolace" },
   [11536] = { "Quartermaster Miranda Breechlock", 1423, 71.8, 50.26, "Eastern Plaguelands" },
+  [11705] = { "Rayan Dawnrisen", 1447, 30.01, 40.18, "Azshara" },
   [11706] = { "Adon", 1423, 50.92, 11.47, "Eastern Plaguelands" },
+  [11707] = { "Joy Ar'nareth", 1447, 30.02, 40.14, "Azshara" },
   [11795] = { "Mylentha Riverbend", 1450, 51.76, 32.58, "Moonglade" },
   [11802] = { "Dendrite Starblaze", 1450, 56.22, 30.65, "Moonglade" },
   [11805] = { "Jarund Stoutstrider", 1451, 82.06, 18.07, "Silithus" },
   [11863] = { "Azore Aldamort", 1443, 38.89, 27.16, "Desolace" },
+  [12024] = { "Meliri", 1450, 51.18, 42.31, "Moonglade" },
   [12029] = { "Narianna", 1450, 53.36, 42.72, "Moonglade" },
+  [12959] = { "Nergal", 1449, 43.27, 7.73, "Un'Goro Crater" },
+  [13656] = { "Willow", 1443, 62.2, 39.63, "Desolace" },
   [13717] = { "Centaur Pariah", 1443, 50.5, 86.67, "Desolace" },
+  [14348] = { "Earthcaller Franzahl", 1452, 53.98, 90.39, "Winterspring" },
   [14437] = { "Gorzeeki Wildeyes", 1428, 12.44, 31.65, "Burning Steppes" },
   [14470] = { "Impsy", 1448, 41.54, 45.01, "Felwood" },
   [14624] = { "Master Smith Burninate", 1427, 38.82, 28.5, "Searing Gorge" },
+  [14628] = { "Evonice Sootsmoker", 1427, 38.35, 27.74, "Searing Gorge" },
   [14634] = { "Lookout Captain Lolo Longstriker", 1427, 37.75, 26.55, "Searing Gorge" },
   [14743] = { "Jhordy Lapforge", 1446, 52.29, 26.89, "Tanaris" },
   [15175] = { "Khur Hornstriker", 1451, 48.67, 37.01, "Silithus" },
   [15194] = { "Hermit Ortell", 1451, 67.19, 69.77, "Silithus" },
+  [249235] = { "Kaylaena Springwhisper", 2482, 60.1, 61.18, "Mount Hyjal" },
+  [257322] = { "Murache", 1440, 64.77, 80.15, "Ashenvale" },
+  [257429] = { "Furious Shadowforge Digger", 1418, 44.29, 11.42, "Badlands" },
+  [257437] = { "Garyanne Fleezlebop", 1418, 67.69, 51.7, "Badlands" },
   [257673] = { "Ugkragg", 1428, 38.42, 35.44, "Burning Steppes" },
   [257743] = { "Hastings", 1430, 46.99, 75.32, "Deadwind Pass" },
   [257750] = { "Calliard", 1430, 48.35, 68.72, "Deadwind Pass" },
@@ -42,6 +72,8 @@ ns.RECORDED_NPCS = {
   [262016] = { "Fallen Adventurer", 1422, 38.2, 72.41, "Western Plaguelands" },
   [262024] = { "Kirala Fairgrass", 1422, 59.57, 53.15, "Western Plaguelands" },
   [262033] = { "Suspicious Adventurer", 1422, 65.74, 76.1, "Western Plaguelands" },
+  [262041] = { "Bor'dorc", 1452, 64.84, 33.22, "Winterspring" },
+  [262044] = { "Zelizax", 1452, 57.62, 88.08, "Winterspring" },
   [262072] = { "The Ravenous", 1445, 53.99, 56.48, "Dustwallow Marsh" },
   [262143] = { "Scout Raroul", 1444, 72.41, 52.47, "Feralas" },
   [262284] = { "Spek", 2548, 76.91, 54.07, "Riverglades" },
@@ -51,12 +83,7 @@ ns.RECORDED_NPCS = {
   [262388] = { "Juo", 1425, 80.13, 55.39, "The Hinterlands" },
   [270919] = { "Ugbert", 1445, 40.99, 27.88, "Dustwallow Marsh" },
   [642320] = { "Battered Trunk", 1431, 26.27, 36.19, "Duskwood" },
-  ["at:1418:619:542"] = { "Writ customer", 1418, 61.94, 54.24, "Badlands" },
-  ["at:1429:838:921"] = { "Writ customer", 1429, 83.88, 92.13, "Elwynn Forest" },
-  ["at:1432:430:865"] = { "Writ customer", 1432, 43.04, 86.51, "Loch Modan" },
-  ["at:1440:647:801"] = { "Writ customer", 1440, 64.77, 80.15, "Ashenvale" },
-  ["at:1452:576:880"] = { "Writ customer", 1452, 57.62, 88.08, "Winterspring" },
-  ["at:1452:648:332"] = { "Writ customer", 1452, 64.84, 33.22, "Winterspring" },
+  [642497] = { "An Old Tombstone", 1422, 49.88, 77.5, "Western Plaguelands" },
 }
 
 -- [writ quest] = place
@@ -65,43 +92,50 @@ ns.RECORDED_WRITS = {
   [94223] = 642320, -- Silver Skeleton Key
   [94224] = 261932, -- Heavy Bronze Mace
   [94225] = 4201, -- Rough Bronze Leggings
-  [94226] = 7853, -- Green Iron Gauntlets
+  [94226] = 2501, -- Green Iron Gauntlets
   [94228] = 8305, -- Green Iron Boots
-  [94232] = "at:1429:838:921", -- Minor Recombobulator
+  [94232] = 3134, -- Minor Recombobulator
   [94234] = 4201, -- Shadow Goggles
-  [94236] = 6626, -- Big Bronze Bomb
+  [94236] = 4706, -- Big Bronze Bomb
   [94238] = 257281, -- Heavy Leather Ball
   [94239] = 257304, -- Fine Leather Pants
-  [94240] = "at:1440:647:801", -- Herbalist's Gloves
+  [94240] = 257322, -- Herbalist's Gloves
   [94242] = 3536, -- Pilferer's Gloves
   [94244] = 2663, -- Dark Leather Shoulders
   [94245] = 4496, -- Barbaric Gloves
   [94246] = 8305, -- Red Whelp Gloves
-  [94250] = "at:1429:838:921", -- Small Silk Pack
+  [94250] = 3134, -- Small Silk Pack
   [94251] = 6176, -- Phoenix Pants
   [94252] = 4201, -- Red Woolen Boots
   [94253] = 261961, -- Colorful Kilt
   [94254] = 6548, -- Greater Adept's Robe
   [94257] = 13717, -- Lesser Invisibility Potion
   [94258] = 4503, -- Lesser Stoneshield Potion
-  [94259] = 10924, -- Nature Protection Potion
+  [94259] = 10922, -- Nature Protection Potion
   [94260] = 262143, -- Catseye Draught
   [94261] = 11802, -- Great Rage Potion
   [94262] = 262284, -- Mana Potion
   [94263] = 262294, -- Fire Protection Potion
   [94264] = 262306, -- Shadow Oil
-  [94265] = 6568, -- Goblin Rocket Fuel
+  [94265] = 5594, -- Goblin Rocket Fuel
   [94266] = 262388, -- Elixir of Agility
   [94267] = 9272, -- Wildvine Potion
-  [94268] = "at:1432:430:865", -- Steel Plate Helm
+  [94268] = 257429, -- Steel Plate Helm
   [94269] = 11438, -- Inlaid Mithril Cylinder
   [94270] = 270919, -- Steel Weapon Chain
+  [94271] = 10921, -- Ornate Mithril Shoulders
+  [94272] = 262143, -- Blue Glittering Axe
+  [94273] = 12024, -- Moonsteel Broadsword
   [94274] = 262284, -- Golden Scale Coif
   [94275] = 14624, -- Solid Sharpening Stone
+  [94276] = 262306, -- Wicked Mithril Blade
   [94277] = 7408, -- Truesilver Rod
+  [94278] = 7801, -- Golden Scale Gauntlets
+  [94279] = 9619, -- Heavy Mithril Axe
+  [94280] = 257437, -- Mechanical Dragonling
   [94281] = 11438, -- Advanced Target Dummy
   [94282] = 262072, -- Craftsman's Monocle
-  [94283] = 10924, -- Goblin Land Mine
+  [94283] = 11019, -- Goblin Land Mine
   [94284] = 262143, -- Catseye Ultra Goggles
   [94285] = 12029, -- Unstable Trigger
   [94286] = 262284, -- Flash Bomb
@@ -109,46 +143,65 @@ ns.RECORDED_WRITS = {
   [94288] = 262379, -- Mithril Frag Bomb
   [94289] = 14743, -- Gyromatic Micro-Adjuster
   [94290] = 5634, -- Mechanical Repair Kit
-  [94291] = 9272, -- Dark Iron Bomb
-  [94292] = "at:1418:619:542", -- Comfortable Leather Hat
+  [94291] = 3000, -- Dark Iron Bomb
+  [94292] = 2888, -- Comfortable Leather Hat
   [94293] = 11863, -- Guardian Cloak
   [94294] = 262072, -- Dusky Bracers
   [94295] = 10924, -- Wild Leather Helmet
   [94296] = 262143, -- Wild Leather Shoulders
   [94297] = 12029, -- Quickdraw Quiver
   [94298] = 262284, -- Swift Boots
-  [94299] = 14624, -- Nightscape Shoulders
+  [94299] = 14628, -- Nightscape Shoulders
   [94300] = 262306, -- Big Voodoo Mask
   [94301] = 8579, -- Big Voodoo Robe
-  [94303] = 9272, -- Thick Leather Ammo Pouch
+  [94302] = 262388, -- Turtle Scale Breastplate
+  [94303] = 12959, -- Thick Leather Ammo Pouch
   [94304] = 2817, -- Mageweave Bag
-  [94307] = 10924, -- Shadoweave Robe
+  [94305] = 13656, -- Shadoweave Gloves
+  [94306] = 6546, -- Crimson Silk Robe
+  [94307] = 9116, -- Shadoweave Robe
   [94308] = 14470, -- Enchanted Mageweave Pouch
   [94309] = 11795, -- Star Belt
   [94310] = 262284, -- Black Mageweave Vest
   [94311] = 14634, -- Red Mageweave Pants
   [94312] = 262379, -- Orange Martial Shirt
   [94313] = 6568, -- White Bandit Mask
+  [94314] = 5598, -- Cindercloth Robe
+  [94315] = 9273, -- Earthen Silk Belt
+  [94316] = 8379, -- Potion of Demonslaying
   [94317] = 7363, -- Dreamless Sleep Potion
   [94318] = 14437, -- Greater Fire Protection Potion
   [94319] = 257743, -- Draught of Detect Demon
   [94320] = 11706, -- Gift of Arthas
   [94322] = 11805, -- Limited Invulnerability Potion
   [94323] = 262024, -- Major Rejuvenation Potion
-  [94324] = "at:1452:648:332", -- Distilled Firewater
+  [94324] = 262041, -- Distilled Firewater
+  [94325] = 11705, -- Radiant Circlet
   [94326] = 7363, -- Radiant Belt
   [94327] = 257673, -- Orcish War Leggings
   [94328] = 257750, -- Mithril Spurs
+  [94333] = 11185, -- Ebon Shiv
+  [94334] = 11705, -- Masterwork Target Dummy
   [94335] = 7363, -- Green Lens
+  [94336] = 257673, -- Lifelike Mechanical Toad
+  [94337] = 257743, -- Gnomish Alarm-O-Bot
+  [94338] = 11038, -- Goblin Jumper Cables XL
+  [94339] = 249235, -- Field Repair Bot 74A
   [94340] = 15175, -- Truesilver Transformer
   [94341] = 262033, -- Sniper Scope
   [94346] = 257743, -- Runic Leather Headband
   [94347] = 11536, -- Wicked Leather Bracers
+  [94348] = 14348, -- Chimeric Vest
   [94350] = 262016, -- Runic Leather Bracers
+  [94351] = 11183, -- Frostsaber Boots
+  [94352] = 11707, -- Wizardweave Turban
+  [94353] = 7363, -- Runecloth Bag
   [94354] = 14437, -- Runecloth Boots
   [94355] = 257743, -- Tuxedo Jacket
+  [94356] = 11140, -- Felcloth Boots
   [94358] = 15194, -- Shadoweave Mask
-  [94360] = "at:1452:576:880", -- Soul Pouch
+  [94359] = 642497, -- Ghostweave Vest
+  [94360] = 262044, -- Soul Pouch
 }
 
 -- Writs Data/Writs.lua limits to one side that players have had on the other:
@@ -514,7 +567,7 @@ ns.RECORDED_REWARDS = {
     } },
   },
   ["Durotar Supply and Logistics"] = {
-    [248196] = { npc = "Apothecary Durelle", time = 1795332724, items = {
+    [248196] = { npc = "Apothecary Durelle", time = 1795442639, items = {
       { id = 250381, name = "Recipe: Elixir of Lesser Spirit", price = 0, quantity = 1, costs = { { value = 45, name = "Merchant's Favor", icon = 135725 } } },
       { id = 250367, name = "Recipe: Lesser Cleric's Elixir", price = 0, quantity = 1, costs = { { value = 45, name = "Merchant's Favor", icon = 135725 } } },
       { id = 250388, name = "Recipe: Elixir of Lesser Intellect", price = 0, quantity = 1, costs = { { value = 45, name = "Merchant's Favor", icon = 135725 } } },
@@ -612,67 +665,67 @@ ns.RECORDED_REWARDS = {
       { id = 251471, name = "Plans: Legionite Glaive", price = 0, quantity = 1, standing = 6, costs = { { value = 120, name = "Merchant's Favor", icon = 135725 } } },
       { id = 271622, name = "Blacksmithing Certification", price = 0, quantity = 1, costs = { { value = 1000, name = "Merchant's Favor", icon = 135725 } } },
     } },
-    [248198] = { npc = "Aza'bek", time = 1794564403, items = {
+    [248198] = { npc = "Aza'bek", time = 1795442855, items = {
       { id = 249885, name = "Recipe: Venomous Smoothie", price = 0, quantity = 1, costs = { { value = 30, name = "Merchant's Favor", icon = 135725 } } },
       { id = 249887, name = "Recipe: Mrrggl Smrrthle", price = 0, quantity = 1, costs = { { value = 30, name = "Merchant's Favor", icon = 135725 } } },
       { id = 249886, name = "Recipe: Slimy Smoothie", price = 0, quantity = 1, costs = { { value = 30, name = "Merchant's Favor", icon = 135725 } } },
       { id = 249889, name = "Recipe: Spicy Smoothie", price = 0, quantity = 1, standing = 5, costs = { { value = 60, name = "Merchant's Favor", icon = 135725 } } },
       { id = 249888, name = "Recipe: Calcified Smoothie", price = 0, quantity = 1, standing = 5, costs = { { value = 60, name = "Merchant's Favor", icon = 135725 } } },
       { id = 249890, name = "Recipe: Wicked Smoothie", price = 0, quantity = 1, standing = 6, costs = { { value = 90, name = "Merchant's Favor", icon = 135725 } } },
-      { id = 159, name = "Refreshing Spring Water", price = 25, quantity = 5, costs = {} },
-      { id = 2678, name = "Mild Spices", price = 10, quantity = 5, costs = {} },
-      { id = 2692, name = "Hot Spices", price = 40, quantity = 1, costs = {} },
-      { id = 3713, name = "Soothing Spices", price = 160, quantity = 1, costs = {} },
-      { id = 10284, name = "Simple Flour", price = 200, quantity = 1, costs = {} },
-      { id = 4471, name = "Flint and Tinder", price = 135, quantity = 1, costs = {} },
-      { id = 4470, name = "Simple Wood", price = 38, quantity = 1, costs = {} },
-      { id = 11291, name = "Star Wood", price = 4500, quantity = 1, costs = {} },
-      { id = 272941, name = "Thick Logs", price = 200000, quantity = 1, costs = {} },
-      { id = 21099, name = "Recipe: Smoked Sagefish", price = 500, quantity = 1, costs = {} },
-      { id = 21219, name = "Recipe: Sagefish Delight", price = 5000, quantity = 1, costs = {} },
-      { id = 4536, name = "Shiny Red Apple", price = 25, quantity = 5, costs = {} },
+      { id = 159, name = "Refreshing Spring Water", price = 21, quantity = 5, costs = {} },
+      { id = 2678, name = "Mild Spices", price = 9, quantity = 5, costs = {} },
+      { id = 2692, name = "Hot Spices", price = 33, quantity = 1, costs = {} },
+      { id = 3713, name = "Soothing Spices", price = 130, quantity = 1, costs = {} },
+      { id = 10284, name = "Simple Flour", price = 162, quantity = 1, costs = {} },
+      { id = 4471, name = "Flint and Tinder", price = 110, quantity = 1, costs = {} },
+      { id = 4470, name = "Simple Wood", price = 31, quantity = 1, costs = {} },
+      { id = 11291, name = "Star Wood", price = 3645, quantity = 1, costs = {} },
+      { id = 272941, name = "Thick Logs", price = 162000, quantity = 1, costs = {} },
+      { id = 21099, name = "Recipe: Smoked Sagefish", price = 405, quantity = 1, costs = {} },
+      { id = 21219, name = "Recipe: Sagefish Delight", price = 4050, quantity = 1, costs = {} },
+      { id = 4536, name = "Shiny Red Apple", price = 21, quantity = 5, costs = {} },
     } },
-    [248199] = { npc = "Beneris", time = 1794847577, items = {
-      { id = 249479, name = "Formula: Enchant Weapon - Insight", price = 0, quantity = 1, costs = { { value = 45, name = "Merchant's Favor", icon = 135725 } } },
+    [248199] = { npc = "Beneris", time = 1795442769, items = {
       { id = 249483, name = "Formula: Soulstaff", price = 0, quantity = 1, costs = { { value = 45, name = "Merchant's Favor", icon = 135725 } } },
       { id = 249485, name = "Formula: Orb of Souls", price = 0, quantity = 1, costs = { { value = 45, name = "Merchant's Favor", icon = 135725 } } },
       { id = 249484, name = "Formula: Orb of Mystic Insight", price = 0, quantity = 1, costs = { { value = 45, name = "Merchant's Favor", icon = 135725 } } },
       { id = 249482, name = "Formula: Glimmering Staff", price = 0, quantity = 1, costs = { { value = 45, name = "Merchant's Favor", icon = 135725 } } },
-      { id = 249481, name = "Formula: Enchant Weapon - Revelation", price = 0, quantity = 1, costs = { { value = 45, name = "Merchant's Favor", icon = 135725 } } },
-      { id = 249480, name = "Formula: Enchant Weapon - Recovery", price = 0, quantity = 1, costs = { { value = 45, name = "Merchant's Favor", icon = 135725 } } },
-      { id = 249477, name = "Formula: Tenets of the Silver Hand", price = 0, quantity = 1, costs = { { value = 45, name = "Merchant's Favor", icon = 135725 } } },
-      { id = 249478, name = "Formula: Polished Driftwood Icon", price = 0, quantity = 1, costs = { { value = 45, name = "Merchant's Favor", icon = 135725 } } },
       { id = 249476, name = "Formula: Mystic Mushroom", price = 0, quantity = 1, costs = { { value = 45, name = "Merchant's Favor", icon = 135725 } } },
+      { id = 249478, name = "Formula: Polished Driftwood Icon", price = 0, quantity = 1, costs = { { value = 45, name = "Merchant's Favor", icon = 135725 } } },
+      { id = 249477, name = "Formula: Tenets of the Silver Hand", price = 0, quantity = 1, costs = { { value = 45, name = "Merchant's Favor", icon = 135725 } } },
+      { id = 249479, name = "Formula: Enchant Weapon - Insight", price = 0, quantity = 1, costs = { { value = 45, name = "Merchant's Favor", icon = 135725 } } },
+      { id = 249480, name = "Formula: Enchant Weapon - Recovery", price = 0, quantity = 1, costs = { { value = 45, name = "Merchant's Favor", icon = 135725 } } },
+      { id = 249481, name = "Formula: Enchant Weapon - Revelation", price = 0, quantity = 1, costs = { { value = 45, name = "Merchant's Favor", icon = 135725 } } },
+      { id = 249509, name = "Formula: Twisting Essence Jar", price = 0, quantity = 1, costs = { { value = 120, name = "Merchant's Favor", icon = 135725 } } },
       { id = 249503, name = "Formula: Enchant Necklace - Healing Power", price = 0, quantity = 1, costs = { { value = 120, name = "Merchant's Favor", icon = 135725 } } },
       { id = 249502, name = "Formula: Enchant Necklace - Spell Power", price = 0, quantity = 1, costs = { { value = 120, name = "Merchant's Favor", icon = 135725 } } },
       { id = 249496, name = "Formula: Enchant Necklace - Strength", price = 0, quantity = 1, costs = { { value = 120, name = "Merchant's Favor", icon = 135725 } } },
       { id = 249494, name = "Formula: Libram of Invocation", price = 0, quantity = 1, costs = { { value = 120, name = "Merchant's Favor", icon = 135725 } } },
       { id = 249493, name = "Formula: Talons of Wrath", price = 0, quantity = 1, costs = { { value = 120, name = "Merchant's Favor", icon = 135725 } } },
-      { id = 249505, name = "Formula: Enchant Necklace - Deflection", price = 0, quantity = 1, costs = { { value = 120, name = "Merchant's Favor", icon = 135725 } } },
-      { id = 249504, name = "Formula: Enchant Necklace - Agility", price = 0, quantity = 1, costs = { { value = 120, name = "Merchant's Favor", icon = 135725 } } },
       { id = 249495, name = "Formula: Totem of Ancestral Protection", price = 0, quantity = 1, costs = { { value = 120, name = "Merchant's Favor", icon = 135725 } } },
       { id = 249510, name = "Formula: Enchant Chest - Absorption", price = 0, quantity = 1, costs = { { value = 120, name = "Merchant's Favor", icon = 135725 } } },
-      { id = 249507, name = "Formula: Dreamstaff", price = 0, quantity = 1, costs = { { value = 120, name = "Merchant's Favor", icon = 135725 } } },
       { id = 249506, name = "Formula: Radiant Staff", price = 0, quantity = 1, costs = { { value = 120, name = "Merchant's Favor", icon = 135725 } } },
-      { id = 249509, name = "Formula: Twisting Essence Jar", price = 0, quantity = 1, costs = { { value = 120, name = "Merchant's Favor", icon = 135725 } } },
+      { id = 249507, name = "Formula: Dreamstaff", price = 0, quantity = 1, costs = { { value = 120, name = "Merchant's Favor", icon = 135725 } } },
       { id = 249508, name = "Formula: Truesilver Conduit", price = 0, quantity = 1, costs = { { value = 120, name = "Merchant's Favor", icon = 135725 } } },
+      { id = 249504, name = "Formula: Enchant Necklace - Agility", price = 0, quantity = 1, costs = { { value = 120, name = "Merchant's Favor", icon = 135725 } } },
+      { id = 249505, name = "Formula: Enchant Necklace - Deflection", price = 0, quantity = 1, costs = { { value = 120, name = "Merchant's Favor", icon = 135725 } } },
       { id = 249537, name = "Formula: Brilliant Wand", price = 0, quantity = 1, standing = 6, costs = { { value = 180, name = "Merchant's Favor", icon = 135725 } } },
       { id = 289560, name = "Formula: Enchant Boots - Speed", price = 0, quantity = 1, standing = 6, costs = { { value = 180, name = "Merchant's Favor", icon = 135725 } } },
+      { id = 274394, name = "Formula: Enchant 2H Weapon - Spellblasting", price = 0, quantity = 1, standing = 6, costs = { { value = 240, name = "Merchant's Favor", icon = 135725 } } },
+      { id = 274401, name = "Formula: Enchant Bracer - Greater Spellpower", price = 0, quantity = 1, standing = 6, costs = { { value = 240, name = "Merchant's Favor", icon = 135725 } } },
+      { id = 274399, name = "Formula: Enchant Cloak - Agility", price = 0, quantity = 1, standing = 6, costs = { { value = 240, name = "Merchant's Favor", icon = 135725 } } },
+      { id = 274398, name = "Formula: Enchant Gloves - Superior Strength", price = 0, quantity = 1, standing = 6, costs = { { value = 240, name = "Merchant's Favor", icon = 135725 } } },
+      { id = 274393, name = "Formula: Enchant Off Hand - Wisdom", price = 0, quantity = 1, standing = 6, costs = { { value = 240, name = "Merchant's Favor", icon = 135725 } } },
+      { id = 249526, name = "Formula: Enchant 2H Weapon - Mighty Healing Power", price = 0, quantity = 1, standing = 6, costs = { { value = 240, name = "Merchant's Favor", icon = 135725 } } },
+      { id = 249525, name = "Formula: Enchant 2H Weapon - Mighty Spell Power", price = 0, quantity = 1, standing = 6, costs = { { value = 240, name = "Merchant's Favor", icon = 135725 } } },
       { id = 249532, name = "Formula: Totem of Thunder", price = 0, quantity = 1, standing = 6, costs = { { value = 240, name = "Merchant's Favor", icon = 135725 } } },
+      { id = 249530, name = "Formula: Libram of Holy Alacrity", price = 0, quantity = 1, standing = 6, costs = { { value = 240, name = "Merchant's Favor", icon = 135725 } } },
       { id = 249529, name = "Formula: Idol of the Dream", price = 0, quantity = 1, standing = 6, costs = { { value = 240, name = "Merchant's Favor", icon = 135725 } } },
       { id = 249535, name = "Formula: Enchant Gloves - Natural Power", price = 0, quantity = 1, standing = 6, costs = { { value = 240, name = "Merchant's Favor", icon = 135725 } } },
       { id = 249536, name = "Formula: Enchant Gloves - Holy Power", price = 0, quantity = 1, standing = 6, costs = { { value = 240, name = "Merchant's Favor", icon = 135725 } } },
       { id = 249534, name = "Formula: Enchant Gloves - Arcane Power", price = 0, quantity = 1, standing = 6, costs = { { value = 240, name = "Merchant's Favor", icon = 135725 } } },
       { id = 249538, name = "Formula: Enchant Bracer - Superior Intellect", price = 0, quantity = 1, standing = 6, costs = { { value = 240, name = "Merchant's Favor", icon = 135725 } } },
       { id = 249539, name = "Formula: Enchant Bracer - Superior Deflection", price = 0, quantity = 1, standing = 6, costs = { { value = 240, name = "Merchant's Favor", icon = 135725 } } },
-      { id = 249525, name = "Formula: Enchant 2H Weapon - Mighty Spell Power", price = 0, quantity = 1, standing = 6, costs = { { value = 240, name = "Merchant's Favor", icon = 135725 } } },
-      { id = 249526, name = "Formula: Enchant 2H Weapon - Mighty Healing Power", price = 0, quantity = 1, standing = 6, costs = { { value = 240, name = "Merchant's Favor", icon = 135725 } } },
-      { id = 274393, name = "Formula: Enchant Off Hand - Wisdom", price = 0, quantity = 1, standing = 6, costs = { { value = 240, name = "Merchant's Favor", icon = 135725 } } },
-      { id = 274398, name = "Formula: Enchant Gloves - Superior Strength", price = 0, quantity = 1, standing = 6, costs = { { value = 240, name = "Merchant's Favor", icon = 135725 } } },
-      { id = 274399, name = "Formula: Enchant Cloak - Agility", price = 0, quantity = 1, standing = 6, costs = { { value = 240, name = "Merchant's Favor", icon = 135725 } } },
-      { id = 274401, name = "Formula: Enchant Bracer - Greater Spellpower", price = 0, quantity = 1, standing = 6, costs = { { value = 240, name = "Merchant's Favor", icon = 135725 } } },
-      { id = 274394, name = "Formula: Enchant 2H Weapon - Spellblasting", price = 0, quantity = 1, standing = 6, costs = { { value = 240, name = "Merchant's Favor", icon = 135725 } } },
-      { id = 249530, name = "Formula: Libram of Holy Alacrity", price = 0, quantity = 1, standing = 6, costs = { { value = 240, name = "Merchant's Favor", icon = 135725 } } },
       { id = 271624, name = "Enchanting Certification", price = 0, quantity = 1, costs = { { value = 1000, name = "Merchant's Favor", icon = 135725 } } },
     } },
     [248200] = { npc = "Fizzlefuse", time = 1794529722, items = {
@@ -788,7 +841,7 @@ ns.RECORDED_REWARDS = {
       { id = 252853, name = "Pattern: Prowler's Leather Bracers", price = 0, quantity = 1, standing = 6, costs = { { value = 90, name = "Merchant's Favor", icon = 135725 } } },
       { id = 271626, name = "Leatherworking Certification", price = 0, quantity = 1, costs = { { value = 1000, name = "Merchant's Favor", icon = 135725 } } },
     } },
-    [248202] = { npc = "Jim'bek", time = 1794759661, items = {
+    [248202] = { npc = "Jim'bek", time = 1795442794, items = {
       { id = 253892, name = "Pattern: Silky Boots", price = 0, quantity = 1, costs = { { value = 30, name = "Merchant's Favor", icon = 135725 } } },
       { id = 253898, name = "Pattern: Pearly Boots", price = 0, quantity = 1, costs = { { value = 30, name = "Merchant's Favor", icon = 135725 } } },
       { id = 253890, name = "Pattern: Pristine Boots", price = 0, quantity = 1, costs = { { value = 30, name = "Merchant's Favor", icon = 135725 } } },

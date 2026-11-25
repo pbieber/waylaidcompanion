@@ -17,14 +17,23 @@ No writ is ever dropped: one already in Recorded.lua stays unless the saved data
 better (an NPC's name for what was only a spot, or a spot the addon has since moved to the
 zone it really lies in).
 
+Last, the quest finishers QuestieDB lists for WoW Forever (installed in the client's
+AddOns, read-only) win over everything above: the addon files a writ's map point under an
+NPC it already knows within 1% of it (Learn.lua), so a neighbour's name can stand where
+the real finisher is, and QuestieDB names the finisher itself. Where QuestieDB has none,
+WOWHEAD_FINISHERS (read off Wowhead's WoW Forever quest pages) fills in, placed by
+QuestieDB's spawns.
+
     python scripts/bake_waylaid.py [--wow "C:/Program Files (x86)/World of Warcraft"] [--dry-run]
-                                   [--no-saved] [share.txt ...]
+                                   [--no-saved] [--no-questie] [share.txt ...]
 
 Needs lupa (pip install lupa) to read the Lua files.
 """
 from pathlib import Path
 import argparse
+import base64
 import re
+import struct
 import sys
 
 try:
@@ -38,6 +47,126 @@ ADDON = ROOT
 OUT = ADDON / 'Data' / 'Recorded.lua'
 SHARES = ROOT / 'shares'
 SHARE_STRING = re.compile(r'PWC1:[0-9a-fA-F]{8}:[A-Za-z0-9+/=\s]+\.')
+
+# Writ finishers QuestieDB does not have, from Wowhead's WoW Forever quest pages
+# ("End:" in Quick Facts), read 2026-11-24: [writ quest] = ('Npc' or 'Object', id).
+WOWHEAD_FINISHERS = {
+    94325: ('Npc', 11705),      # Radiant Circlet: Rayan Dawnrisen
+    94338: ('Npc', 11038),      # Goblin Jumper Cables XL: Caretaker Alen
+    94339: ('Npc', 249235),     # Field Repair Bot 74A: Kaylaena Springwhisper
+    94352: ('Npc', 11707),      # Wizardweave Turban: Joy Ar'nareth
+    94356: ('Npc', 11140),      # Felcloth Boots: Egan
+    94359: ('Object', 642497),  # Ghostweave Vest: An Old Tombstone
+}
+
+
+def cbor(data, i=0):
+    """One CBOR value from data at i: (value, next index). The shapes QuestieDB stores."""
+    head = data[i]
+    major, info = head >> 5, head & 31
+    i += 1
+    if major == 7:
+        simple = {20: False, 21: True, 22: None, 23: None}
+        if info in simple:
+            return simple[info], i
+        size, fmt = {25: (2, '>e'), 26: (4, '>f'), 27: (8, '>d')}[info]
+        return struct.unpack(fmt, data[i:i + size])[0], i + size
+    if info < 24:
+        n = info
+    else:
+        size = {24: 1, 25: 2, 26: 4, 27: 8}[info]
+        n = int.from_bytes(data[i:i + size], 'big')
+        i += size
+    if major == 0:
+        return n, i
+    if major == 1:
+        return -1 - n, i
+    if major == 2:
+        return data[i:i + n], i + n
+    if major == 3:
+        return data[i:i + n].decode('utf-8', 'replace'), i + n
+    if major == 4:
+        out = []
+        for _ in range(n):
+            value, i = cbor(data, i)
+            out.append(value)
+        return out, i
+    if major == 5:
+        out = {}
+        for _ in range(n):
+            key, i = cbor(data, i)
+            out[key], i = cbor(data, i)
+        return out, i
+    return cbor(data, i)  # a tag: its value
+
+
+class Questie:
+    """QuestieDB's WoW Forever data, as its TOC metadata stores it (base64 CBOR values, long
+    ones split into numbered parts), with Questie's zone tables to place what it lists."""
+
+    QUEST_FINISHED_BY, NPC_SPAWNS, OBJECT_SPAWNS = 3, 7, 4
+
+    def __init__(self, addons):
+        self.meta = {}
+        toc = addons / 'QuestieDB' / 'QuestieDB_Forever.toc'
+        for line in toc.read_text(encoding='utf-8').splitlines():
+            m = re.match(r'^## (X-[^:]+): (.*)$', line)
+            if m:
+                self.meta[m.group(1)] = m.group(2)
+        self.version = self.meta.get('X-BUILD-COMMIT', '?')[:8]
+        # Zone (area) id -> uiMapID: the table, then its overrides.
+        zones = (addons / 'QuestieDB' / 'support' / 'Forever' / 'Zones' / 'areaIdToUiMapId.lua').read_text(encoding='utf-8')
+        override, _, main = zones.partition('ZoneDB.private.areaIdToUiMapId =')
+        self.ui_map = {int(a): int(m) for a, m in re.findall(r'\[(\d+)\]\s*=\s*(\d+)', main)}
+        self.ui_map.update({int(a): int(m) for a, m in re.findall(r'\[(\d+)\]\s*=\s*(\d+)', override) if int(m)})
+        # Zone id -> its English name.
+        lookup = (addons / 'Questie' / 'Localization' / 'lookups' / 'lookupZones.lua').read_text(encoding='utf-8')
+        block = lookup[lookup.index('l10n.zoneLookup'):lookup.index('l10n.zoneCategoryLookup')]
+        self.zone_name = {}
+        for zone, name in re.findall(r'\[(\d+)\]="([^"]+)"', block):
+            self.zone_name.setdefault(int(zone), name)
+
+    def stored(self, key):
+        value = self.meta.get(key)
+        if value is None:
+            return None
+        parts = re.match(r'^~(\d+)~$', value)
+        if parts:
+            value = ''.join(self.meta['%s-%d' % (key, n)] for n in range(1, int(parts.group(1)) + 1))
+        return cbor(base64.b64decode(value))[0]
+
+    def field(self, kind, id, index):
+        value = self.stored('X-%s-%d-%d' % (kind, id, index))
+        if value is not None:
+            return value
+        row = self.stored('X-%s-%d-S' % (kind, id))  # the short fields, together
+        return row.get(index) if isinstance(row, dict) else None
+
+    def finishers(self, quest):
+        """[('Npc' or 'Object', id)] that QuestieDB says take the quest."""
+        by = self.field('Quest', quest, self.QUEST_FINISHED_BY)
+        if not isinstance(by, list):
+            return []
+        npcs = by[0] if len(by) > 0 and isinstance(by[0], list) else []
+        objects = by[1] if len(by) > 1 and isinstance(by[1], list) else []
+        return [('Npc', n) for n in npcs] + [('Object', o) for o in objects]
+
+    def place(self, kind, id):
+        """[name, uiMapID, x, y, zone] where it stands, or None (no name, or no spawn on a
+        map the game draws)."""
+        name = self.field(kind, id, 1)
+        if isinstance(name, bytes):
+            name = name.decode('utf-8', 'replace')
+        spawns = self.field(kind, id, self.NPC_SPAWNS if kind == 'Npc' else self.OBJECT_SPAWNS)
+        if not name or not isinstance(spawns, dict):
+            return None
+        for zone, points in spawns.items():
+            ui_map = self.ui_map.get(zone)
+            point = next((p for p in points if isinstance(p, list) and len(p) >= 2 and p[0] >= 0), None)
+            if ui_map and point:
+                return [name, ui_map, round(point[0], 2), round(point[1], 2),
+                        self.zone_name.get(zone, '?')]
+        return None
 
 
 def to_py(value):
@@ -200,6 +329,7 @@ def main():
     parser.add_argument('--wow', default='C:/Program Files (x86)/World of Warcraft')
     parser.add_argument('--dry-run', action='store_true', help='report, write nothing')
     parser.add_argument('--no-saved', action='store_true', help="leave out this computer's saved data")
+    parser.add_argument('--no-questie', action='store_true', help="leave out QuestieDB's quest finishers")
     parser.add_argument('shares', nargs='*', type=Path,
                         help='files holding shared strings (default: every .txt in shares/)')
     args = parser.parse_args()
@@ -253,6 +383,44 @@ def main():
         for quest, yes in (db.get('anySide') or {}).items():
             if yes is True and recorded['sides'].get(quest):
                 any_side.add(quest)
+
+    # QuestieDB's finishers (Wowhead's where it has none) win: see the docstring.
+    if not args.no_questie:
+        addons = Path(args.wow) / '_forever_' / 'Interface' / 'AddOns'
+        if not (addons / 'QuestieDB' / 'QuestieDB_Forever.toc').exists():
+            sys.exit('No QuestieDB for Forever under ' + str(addons) + ' (use --no-questie to skip)')
+        questie = Questie(addons)
+        added = changed = 0
+        for quest in sorted(writs):
+            if writs[quest] is not None:
+                continue  # Data/Writs.lua already has its NPC
+            listed = questie.finishers(quest)
+            source = 'QuestieDB'
+            if not listed and quest in WOWHEAD_FINISHERS:
+                listed, source = [WOWHEAD_FINISHERS[quest]], 'Wowhead'
+            found = next(((kind, id, questie.place(kind, id)) for kind, id in listed
+                          if questie.place(kind, id)), None)
+            if listed and not found:
+                print('  ! quest %s (%s): %s names %s, which has no place, skipped' % (
+                    quest, names[quest], source, listed))
+                continue
+            if not found:
+                continue
+            kind, id, at = found
+            old = where.get(quest)
+            if old == id:
+                continue
+            if old is None:
+                added += 1
+                print('  quest %s (%s): %s %s (%s)' % (quest, names[quest], source, at[0], at[4]))
+            else:
+                changed += 1
+                was = npcs[old][0] if old in npcs else old
+                print('  quest %s (%s): %s %s (%s), was %s' % (quest, names[quest], source, at[0], at[4], was))
+            where[quest] = id
+            if id not in shipped_npcs:
+                npcs[id] = at
+        print('QuestieDB %s and Wowhead: %d writs added, %d changed.' % (questie.version, added, changed))
 
     used = set(where.values())
     npcs = {k: v for k, v in npcs.items() if k in used}
