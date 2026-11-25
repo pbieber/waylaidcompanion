@@ -68,9 +68,16 @@ local function showTooltip(row)
       end
     end
     GameTooltip:Show()
-  elseif tip then
+  elseif tip or entry.lines then
     GameTooltip:SetOwner(row, "ANCHOR_RIGHT")
-    GameTooltip:AddLine(tip, 1, 1, 1, true)
+    if tip then GameTooltip:AddLine(tip, 1, 1, 1, true) end
+    for _, line in ipairs(entry.lines and entry.lines() or {}) do
+      if line[2] then
+        GameTooltip:AddDoubleLine(line[1], line[2], 1, 1, 1, 1, 1, 1)
+      else
+        GameTooltip:AddLine(line[1], 1, 1, 1)
+      end
+    end
     GameTooltip:Show()
   end
 end
@@ -874,7 +881,7 @@ local function writCostTip()
   local what = ns.db.writCost == "total" and "Writ and material"
     or ("Writ and material per " .. ns.ScaleLabel(ns.db.repScale, "rep"))
   if ns.db.writPouch ~= false then what = what .. ", less the coin pouch's average silver" end
-  return what .. ", at AH prices (your scan or Auctionator, newest).\n"
+  return what .. ", at AH prices (your scan or Auctionator, newest; TSM where those have none or an old one).\n"
     .. "+ ?  a part has no price.\n"
     .. ("*  a price is %d+ days old.\n"):format(ns.OLD_PRICE_DAYS)
     .. "Per rep or absolute: the Cost button at the bottom right. The scale: Options."
@@ -1000,7 +1007,7 @@ local function crateCostTip()
     what = what .. " per " .. ns.ScaleLabel(ns.db.favorScale, "Merchant's Favor")
       .. (ns.db.crateRefund ~= false and ", less the quest reward silver" or "")
   end
-  return what .. ", at AH prices (your scan or Auctionator, newest).\n"
+  return what .. ", at AH prices (your scan or Auctionator, newest; TSM where those have none or an old one).\n"
     .. "On a crate: its cheapest material. On a material: that one.\n"
     .. CHEAPEST .. " the crate's cheapest material.\n"
     .. "+ ?  a part has no price.\n"
@@ -1378,24 +1385,86 @@ local TURNIN_WRIT_COLUMNS = { 0, 280, 470, 550, 710 }
 
 --- What a group of writs costs, writ and material, shaped like a writ's cost so the
 --- writs page's Cost column shows it: { net, perRep (over all their reputation),
---- partial, old }. The writs open today only; `done` when none is.
+--- partial, old }. The writs open today only; `done` when none is. For the breakdown:
+--- open (how many), writs and materials (what their priced parts cost), pouches (the coin
+--- pouches' average silver, for the writs with a price; net = writs + materials -
+--- pouches), noWrit and noMaterial (how many have no price for that part), age (days
+--- since the oldest price was seen).
 local function writsCost(writs)
   local open = {}
   for _, writ in ipairs(writs) do
     if ns.WritState(writ) ~= "done" then open[#open + 1] = writ end
   end
   local net, rep, priced = 0, 0, false
-  local out = { partial = false, old = false, done = #open == 0 }
+  local out = { partial = false, old = false, done = #open == 0, open = #open,
+    writs = 0, materials = 0, pouches = 0, noWrit = 0, noMaterial = 0 }
   for _, writ in ipairs(open) do
     local cost = ns.WritCost(writ)
-    if cost.net then net, priced = net + cost.net, true end
+    if cost.net then
+      net, priced = net + cost.net, true
+      out.pouches = out.pouches + cost.pouch
+    end
+    if cost.writ then out.writs = out.writs + cost.writ else out.noWrit = out.noWrit + 1 end
+    if cost.material then
+      out.materials = out.materials + cost.material
+    else
+      out.noMaterial = out.noMaterial + 1
+    end
     rep = rep + ns.WRIT_REP[writ.tier]
     out.partial = out.partial or cost.partial
     out.old = out.old or cost.old
+    if cost.age and (not out.age or cost.age > out.age) then out.age = cost.age end
   end
   out.rep = rep
   if priced then out.net, out.perRep = net, net / rep end
   return out
+end
+
+--- Tooltip lines that show how a group's cost (writsCost) is made up: what the writs and
+--- their material cost, what the coin pouches give back on average, and the cost left.
+local function writsCostLines(cost)
+  local lines = { { " " } }
+  if cost.done then
+    lines[#lines + 1] = { ns.Color(GREY, "All handed in today.") }
+    return lines
+  end
+  if not ns.HasPrices() then
+    costLines(lines, {})
+    return lines
+  end
+  lines[#lines + 1] = { ns.Color(GOLD, ("%d writ%s open today, +%d rep"):format(cost.open,
+    cost.open == 1 and "" or "s", cost.rep)) }
+  local function part(label, copper, missing)
+    lines[#lines + 1] = { "  " .. label, ns.Coins(copper) .. (missing > 0 and ns.Color(ORANGE, " + ?") or "") }
+  end
+  part("Writs", cost.writs, cost.noWrit)
+  part("Materials", cost.materials, cost.noMaterial)
+  -- What buying it all costs, before the pouches pay any back.
+  lines[#lines + 1] = { ns.Color(GOLD, "Full cost"), ns.Coins(cost.writs + cost.materials)
+    .. ((cost.noWrit + cost.noMaterial > 0) and ns.Color(ORANGE, " + ?") or "") }
+  if cost.pouches > 0 then
+    lines[#lines + 1] = { "  Coin pouches back (average)", ns.Color(GREEN, "-" .. ns.Coins(cost.pouches)) }
+  end
+  if not cost.net then
+    lines[#lines + 1] = { ns.Color(GOLD, "Cost"), ns.Color(GREY, "no price") }
+    return lines
+  end
+  local suffix = cost.partial and ns.Color(ORANGE, " + ?") or ""
+  lines[#lines + 1] = { ns.Color(GOLD, "Cost"), ns.SignedCoins(cost.net) .. suffix }
+  lines[#lines + 1] = { ns.Color(GOLD, "Cost / " .. ns.ScaleLabel(ns.db.repScale, "rep")),
+    ns.SignedCoins(cost.perRep * ns.db.repScale) .. suffix }
+  local missing = {}
+  if cost.noWrit > 0 then missing[#missing + 1] = ("%d writ%s"):format(cost.noWrit, cost.noWrit == 1 and "" or "s") end
+  if cost.noMaterial > 0 then
+    missing[#missing + 1] = ("%d material%s"):format(cost.noMaterial, cost.noMaterial == 1 and "" or "s")
+  end
+  if #missing > 0 then
+    lines[#lines + 1] = { ns.Color(ORANGE, "  No price: " .. table.concat(missing, ", ")) }
+  end
+  if cost.old and cost.age then
+    lines[#lines + 1] = { ns.Color(ORANGE, ("  Oldest price %d days old"):format(cost.age)) }
+  end
+  return lines
 end
 
 --- The items a scan prices for some writs: each writ and its material.
@@ -1529,7 +1598,10 @@ pages.turnins = {
             if ns.AuctionHouseOpen() and ns.CanBuy() and zone.open > 0 then
               return zone.name .. "\n|cff40d040Click: buy the writs open today here and their material.|r"
             end
+            return zone.name
           end,
+          -- How the zone's cost is made up, worked out at the hover.
+          lines = function() return writsCostLines(writsCost(zone.writs)) end,
           click = function()
             if ns.AuctionHouseOpen() and ns.CanBuy() and zone.open > 0 then ns.BuyForStops(zone.stops, zone.name) end
           end,
@@ -1745,19 +1817,23 @@ local function recipeSkill(id, profession)
 end
 
 local KNOWN = ITEM_SPELL_KNOWN or "Already known"
-local known = {}
---- Whether the character already knows what an item teaches: its tooltip says "Already
---- known". Kept until the character learns something (below); unknown while the game has
---- no data for the item.
-local function learned(id)
-  if known[id] ~= nil then return known[id] end
-  local lines = itemLines(id)
-  if #lines == 0 then return false end
+local known, checkedAt = {}, {}
+-- A recipe whose tooltip didn't say "Already known" is looked at again after this long:
+-- the tooltip can be read before the game has sent all of the item.
+local RECHECK = 30
+--- Whether the character already knows what an item teaches: the recipe is in its
+--- profession window (Rewards.lua), or the item's tooltip says "Already known". A yes is
+--- kept until the character learns something (below).
+local function learned(id, name)
+  if ns.KnowsRecipe and ns.KnowsRecipe(name) then return true end
+  if known[id] then return true end
+  local now = GetTime and GetTime() or 0
+  if checkedAt[id] and now - checkedAt[id] < RECHECK then return false end
   local found = false
-  for _, text in ipairs(lines) do
+  for _, text in ipairs(itemLines(id)) do
     if text == KNOWN then found = true break end
   end
-  known[id] = found
+  if found then known[id] = true else checkedAt[id] = now end
   return found
 end
 
@@ -1772,8 +1848,8 @@ learnEvents:SetScript("OnEvent", function(_, event, text)
   -- In combat the chat text comes as a secret: skip it, the other events still clear the cache.
   text = ns.Readable(text)
   if event == "CHAT_MSG_SYSTEM" and not (type(text) == "string" and text:find(LEARN_RECIPE)) then return end
-  if next(known) then
-    known = {}
+  if next(known) or next(checkedAt) then
+    known, checkedAt = {}, {}
     ns.Changed()
   end
 end)
@@ -1853,7 +1929,7 @@ pages.rewards = {
                 name,
                 item.standing and ns.StandingName(item.standing) or ns.Color(GREY, "None"),
                 rewardCost(item),
-                (learned(item.id) and CHEAPEST .. ns.Color(GREEN, "Learned"))
+                (learned(item.id, info[item].name) and CHEAPEST .. ns.Color(GREEN, "Learned"))
                   or (open and ns.Color(GREEN, "Available")) or ns.Color(GREY, "Locked"),
               },
             }

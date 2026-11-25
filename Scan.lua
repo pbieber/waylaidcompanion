@@ -2,7 +2,8 @@
 Scanning the auction house for the prices a page uses: from the writs page each writ and
 what it asks for, from the crates page each crate and what fills it (/pwc scan: both).
 The lowest price listed for each item is kept in the saved settings (ns.ScannedPrices),
-with the time, and Core.lua weighs it against Auctionator's own price by which is newer.
+with the time, and Core.lua weighs it against Auctionator's own price by which is newer
+(TradeSkillMaster's filling in where both have none or an old one).
 
 Two auction houses, two ways to ask:
 

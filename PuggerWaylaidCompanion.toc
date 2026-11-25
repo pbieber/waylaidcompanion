@@ -6,7 +6,7 @@
 ## IconTexture: Interface/AddOns/PuggerWaylaidCompanion/Media/pugger
 ## Category-enUS: Auctions
 ## SavedVariables: PuggerWaylaidCompanionDB
-## OptionalDeps: Auctionator, OpenMap
+## OptionalDeps: Auctionator, TradeSkillMaster, OpenMap
 ## AddonCompartmentFunc: PuggerWaylaidCompanion_OnAddonCompartmentClick
 
 Data/Writs.lua

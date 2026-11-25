@@ -10,7 +10,7 @@ The Options page: how the writs and crates pages show cost, and how characters a
   - World map: the turn-in markers' size (a slider, 25 to 200%, with a marker drawn at
     that size beside it; on OpenMap's map times its Icon size), whether they show (the same setting as the minimap button's right-click), and
     whether they grow as the map zooms in.
-  - Turn-ins: the page lists each zone's NPCs, or its writs with the NPC beside each.
+  - Turn-ins: the page lists each zone's writs with the NPC beside each (the default), or its NPCs.
   - Wishlist: whether a right-click adds to it, or only a shift-right-click; whether what
     the target lacks glows in the bags, bank and mailbox.
   - Tooltips: what is added to a writ's and a crate's tooltip (Tooltips.lua), each kind on
@@ -279,9 +279,9 @@ function ns.BuildOptions(parent, width)
 
   top = top - 28 - 2 * ROW - 34
   heading("Turn-ins", top)
-  choice("List", top - 28, "turninRows", { { "npc", "NPCs" }, { "writ", "Writs" } })
-  note("NPCs: each zone lists the NPCs that take writs, their writs on hover. Writs: each zone "
-    .. "lists its writs, with the NPC that takes each.", top - 28 - ROW)
+  choice("List", top - 28, "turninRows", { { "writ", "Writs" }, { "npc", "NPCs" } })
+  note("Writs: each zone lists its writs, with the NPC that takes each. NPCs: each zone lists "
+    .. "the NPCs that take writs, their writs on hover.", top - 28 - ROW)
 
   top = top - 28 - ROW - 46
   heading("Wishlist", top)

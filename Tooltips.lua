@@ -16,7 +16,7 @@ A crate:
   Turn in: The Barrens               Dokimi (50.0, 29.2)      (the player's side's camp)
 
 A writ the data doesn't list (a "Craftsman's Writ: " the game names) says its tier is
-unknown. Costs are what the writs and crates pages use: the AH scan's or Auctionator's.
+unknown. Costs are what the writs and crates pages use: the AH scan's, Auctionator's or TSM's.
 ]]
 
 local _, ns = ...

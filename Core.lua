@@ -166,7 +166,7 @@ end
 --- up.
 function ns.AbsorbCharacter(db, old, new)
   if old == new then return end
-  for _, saved in ipairs({ db.bags, db.bank, db.mail }) do
+  for _, saved in ipairs({ db.bags, db.bank, db.mail, db.recipes or {}, db.doneToday or {} }) do
     if saved[old] ~= nil then
       if saved[new] == nil then saved[new] = saved[old] end
       saved[old] = nil
@@ -327,6 +327,27 @@ local function auctionator()
   return api and api.GetAuctionPriceByItemID and api or nil
 end
 
+local function tsm()
+  local api = TSM_API
+  return type(api) == "table" and type(api.GetCustomPriceValue) == "function" and api or nil
+end
+
+-- TradeSkillMaster's price sources, in the order tried: the lowest buyout in its last
+-- AuctionDB data, then its market value.
+local TSM_SOURCES = { "DBMinBuyout", "DBMarket" }
+
+--- An item's price from TradeSkillMaster, in copper; nil without TSM or a price there.
+--- TSM does not say how old its data is.
+local function tsmPrice(id)
+  local api = tsm()
+  if not api then return nil end
+  for _, source in ipairs(TSM_SOURCES) do
+    local ok, price = pcall(api.GetCustomPriceValue, source, "i:" .. id)
+    if ok and type(price) == "number" and price > 0 then return price end
+  end
+  return nil
+end
+
 -- A price last seen this many days ago, or longer, counts as old.
 ns.OLD_PRICE_DAYS = 3
 
@@ -355,18 +376,33 @@ function ns.ScanTimes()
   return db.scanTimes[scope]
 end
 
---- Whether there is anywhere to get prices: Auctionator, or a scan of our own.
+--- Whether there is anywhere to get prices: Auctionator, TradeSkillMaster, or a scan of
+--- our own.
 function ns.HasPrices()
-  return auctionator() ~= nil or next(ns.ScannedPrices() or {}) ~= nil
+  return auctionator() ~= nil or tsm() ~= nil or next(ns.ScannedPrices() or {}) ~= nil
 end
 
 --- What one of an item costs on the auction house, in copper, and how many days ago that
---- price was seen (nil when unknown). The newer of our own scan and Auctionator's;
---- nil when neither has seen one listed.
+--- price was seen (nil when unknown). The newer of our own scan and Auctionator's. Where
+--- neither has one, or theirs is old, TradeSkillMaster's (its age unknown, so nil); nil
+--- when none has a price, or our own recent scan found none listed.
+local newestPrice
 function ns.PriceInfo(id)
+  local price, days, noneListed = newestPrice(id)
+  if price and (days == nil or days < ns.OLD_PRICE_DAYS) then return price, days end
+  if not price and noneListed then return nil, nil end
+  local fromTsm = tsmPrice(id)
+  if fromTsm then return fromTsm, nil end
+  return price, days
+end
+
+--- Our own scan's price or Auctionator's, whichever is newer: copper, days, and whether
+--- our own scan found none listed in the last OLD_PRICE_DAYS.
+function newestPrice(id)
   local own = (ns.ScannedPrices() or {})[id]
   local ownPrice = own and own[1] > 0 and own[1] or nil
   local ownDays = own and math.max(0, math.floor((now() - own[2]) / 86400)) or nil
+  local noneListed = own ~= nil and not ownPrice and ownDays < ns.OLD_PRICE_DAYS
 
   local api, aucPrice, aucDays = auctionator(), nil, nil
   if api then
@@ -382,7 +418,7 @@ function ns.PriceInfo(id)
     return ownPrice, ownDays
   end
   if aucPrice then return aucPrice, aucDays end
-  return nil, nil
+  return nil, nil, noneListed
 end
 
 --- What one of an item costs on the auction house, in copper; nil when there is no price.
@@ -887,7 +923,7 @@ end
 local DEFAULTS = { page = "overview", writSort = "level", crateSort = "level", turninSort = "name", pins = true, ownerNames = 1,
   pinSize = 1, pinZoom = true,
   writCost = "per", crateCost = "per", repScale = 100, favorScale = 1, crateRefund = true, writPouch = true,
-  itemColor = "tier", wishClick = "right", turninRows = "npc",
+  itemColor = "tier", wishClick = "right", turninRows = "writ",
   theme = "modern", mailWhat = "writs" }
 
 -- The newer clients' interaction window events, by window type (Enum.PlayerInteractionType):
@@ -957,6 +993,12 @@ events:SetScript("OnEvent", function(_, event, arg1)
       db.pinSize = math.max(0.25, math.min(2, math.floor(db.pinScale / 0.65 * 20 + 0.5) / 20))
     end
     db.pinScale = nil
+    -- The Turn-ins page listed NPCs by default until 0.12.0, and that default was saved
+    -- like a choice: move it to writs, once (NPCs chosen after this stay).
+    if not db.turninRowsWrit then
+      if db.turninRows == "npc" then db.turninRows = "writ" end
+      db.turninRowsWrit = true
+    end
     for key, value in pairs(DEFAULTS) do
       if db[key] == nil then db[key] = value end
     end

@@ -263,3 +263,93 @@ events:SetScript("OnEvent", function(_, event)
   if event == "MERCHANT_SHOW" then open = true end
   if open then scanSoon() end
 end)
+
+-- ---------------------------------------------------------------------------
+-- Recipes each character knows, read from its profession windows (and the game's "You
+-- have learned how to create a new item" line), so the Rewards page can say a recipe it
+-- sells is learned where the recipe's tooltip doesn't: ns.db.recipes[key] = { [what the
+-- recipe makes] = true }. Only ever added to.
+-- ---------------------------------------------------------------------------
+
+local function knownList()
+  local db, key = ns.db, ns.Character and ns.Character()
+  if not (db and key) then return nil end
+  db.recipes = db.recipes or {}
+  db.recipes[key] = db.recipes[key] or {}
+  return db.recipes[key]
+end
+
+--- Note one recipe as known; true when it is new.
+local function note(name)
+  local list = knownList()
+  if not list or type(name) ~= "string" or name == "" or list[name] then return false end
+  list[name] = true
+  return true
+end
+
+--- Every recipe in the open profession window is known (the filtered or folded-away ones
+--- come another time; nothing is taken off).
+local function readProfession()
+  local added = false
+  if GetNumTradeSkills and GetTradeSkillInfo then
+    local ok, n = pcall(GetNumTradeSkills)
+    for i = 1, (ok and tonumber(n)) or 0 do
+      local name, kind = GetTradeSkillInfo(i)
+      if kind ~= "header" and kind ~= "subheader" and note(name) then added = true end
+    end
+  end
+  if GetNumCrafts and GetCraftInfo then
+    local ok, n = pcall(GetNumCrafts)
+    for i = 1, (ok and tonumber(n)) or 0 do
+      local name, _, kind = GetCraftInfo(i)
+      if kind ~= "header" and note(name) then added = true end
+    end
+  end
+  -- The newer profession window, where a client has it.
+  local ui = C_TradeSkillUI
+  if ui and ui.GetAllRecipeIDs and ui.GetRecipeInfo then
+    local ok, ids = pcall(ui.GetAllRecipeIDs)
+    for _, recipe in ipairs(ok and type(ids) == "table" and ids or {}) do
+      local okInfo, info = pcall(ui.GetRecipeInfo, recipe)
+      if okInfo and type(info) == "table" and info.learned and note(info.name) then added = true end
+    end
+  end
+  if added then ns.Changed() end
+end
+
+-- "You have learned how to create a new item: %s." as a pattern capturing the item.
+local LEARNED = "^" .. (ERR_LEARN_RECIPE_S or "You have learned how to create a new item: %s.")
+  :gsub("([%(%)%.%%%+%-%*%?%[%]%^%$])", "%%%1"):gsub("%%%%s", "(.+)") .. "$"
+
+local reading = false
+local professions = CreateFrame("Frame")
+for _, event in ipairs({ "TRADE_SKILL_SHOW", "TRADE_SKILL_UPDATE", "TRADE_SKILL_LIST_UPDATE", "CRAFT_SHOW", "CRAFT_UPDATE",
+  "CHAT_MSG_SYSTEM" }) do
+  pcall(professions.RegisterEvent, professions, event)
+end
+professions:SetScript("OnEvent", function(_, event, text)
+  if event == "CHAT_MSG_SYSTEM" then
+    -- In combat the chat text comes as a secret: skip it.
+    text = ns.Readable(text)
+    local made = type(text) == "string" and text:match(LEARNED)
+    if made and note(made) then ns.Changed() end
+    return
+  end
+  -- The list fills in over a moment, and updates come in bursts: read once, shortly.
+  if reading then return end
+  reading = true
+  C_Timer.After(0.3, function()
+    reading = false
+    readProfession()
+  end)
+end)
+
+--- Whether the character played knows the recipe an item teaches, by the item's name
+--- ("Recipe: Wicked Smoothie" teaches "Wicked Smoothie"), as its profession window last
+--- showed. False when unknown.
+function ns.KnowsRecipe(itemName)
+  local list = ns.db and ns.db.recipes and ns.db.recipes[ns.Character and ns.Character() or ""]
+  if not list or type(itemName) ~= "string" then return false end
+  local made = itemName:match("^[^:]+:%s*(.+)$")
+  return (made and list[made]) or list[itemName] or false
+end
