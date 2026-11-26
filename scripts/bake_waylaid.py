@@ -408,6 +408,10 @@ def main():
                 continue
             kind, id, at = found
             old = where.get(quest)
+            # QuestieDB's place for its finisher, every run (not only when the writ
+            # changes), so the shipped place doesn't swing between it and the saved one.
+            if id not in shipped_npcs:
+                npcs[id] = at
             if old == id:
                 continue
             if old is None:
